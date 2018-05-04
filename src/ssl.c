@@ -43,6 +43,9 @@ SSL_CTX *ssl_init() {
             SSL_CTX_set_verify_depth(ctx, 0);
             SSL_CTX_set_mode(ctx, SSL_MODE_AUTO_RETRY);
             SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_CLIENT);
+            //SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_OFF);
+            //SSL_CTX_set_options(ctx, SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION);
+            //SSL_CTX_set_options(ctx, SSL_OP_NO_TICKET);
         }
     }
 
