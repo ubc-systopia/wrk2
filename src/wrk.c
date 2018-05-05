@@ -185,7 +185,9 @@ int main(int argc, char **argv) {
         thread *t = &threads[i];
         complete += t->complete;
         bytes    += t->bytes;
-        total_reqs_count += t->cs->all_requests_count;
+        for(uint64_t j = 0; j < t-> connections; j++){
+          total_reqs_count += t->cs[j].all_requests_count;
+        }
         errors.connect += t->errors.connect;
         errors.read    += t->errors.read;
         errors.write   += t->errors.write;
