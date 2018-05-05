@@ -21,9 +21,20 @@
 #define RECVBUF  8192
 #define SAMPLES  100000000
 
+#define SME_CLIENT 1
+#define SME_DBG 0
+
+
+//#if SME_CLIENT
+//#define SOCKET_TIMEOUT_MS   20
+//#define TIMEOUT_INTERVAL_MS 20
+//#else
 #define SOCKET_TIMEOUT_MS   2000
-#define CALIBRATE_DELAY_MS  10000
 #define TIMEOUT_INTERVAL_MS 2000
+//#endif
+#define CALIBRATE_DELAY_MS  10000
+
+
 
 typedef struct {
     pthread_t thread;
@@ -63,9 +74,11 @@ typedef struct connection {
     double throughput;
     double catch_up_throughput;
     uint64_t complete;
+    uint64_t all_requests_count;
     uint64_t complete_at_last_batch_start;
     uint64_t catch_up_start_time;
     uint64_t complete_at_catch_up_start;
+    uint64_t all_requests_count_at_last_batch_start;
     uint64_t thread_start;
     uint64_t start;
     char *request;
@@ -78,6 +91,8 @@ typedef struct connection {
     uint64_t actual_latency_start;
     bool has_pending;
     bool caught_up;
+    bool request_written;
+    uint64_t last_timeout_check;
     // Internal tracking numbers (used purely for debugging):
     uint64_t latest_should_send_time;
     uint64_t latest_expected_start;
