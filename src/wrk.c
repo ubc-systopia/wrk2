@@ -299,9 +299,12 @@ void *thread_main(void *arg) {
     uint64_t calibrate_delay = CALIBRATE_DELAY_MS + (thread->connections * 5);
     uint64_t timeout_delay = TIMEOUT_INTERVAL_MS + (thread->connections * 5);
 #endif
+    
+    
     aeCreateTimeEvent(loop, calibrate_delay, calibrate, thread, NULL);
+
 #if SME_CLIENT
-    aeCreateTimeEvent(loop, timeout_delay/2, check_timeouts, thread, NULL);
+    aeCreateTimeEvent(loop, timeout_delay/4, check_timeouts, thread, NULL);
 #else
     aeCreateTimeEvent(loop, timeout_delay, check_timeouts, thread, NULL);
 #endif
@@ -404,17 +407,8 @@ static int check_timeouts(aeEventLoop *loop, long long id, void *data) {
     thread *thread = data;
     connection *c  = thread->cs;
     uint64_t now   = time_us();
-#if SME_DBG
-    printf("\tChecking request time out at time  %lld, %lld after last check\n", now, now - c->last_timeout_check );
-#endif
-#if SME_CLIENT 
-    if (c->request_written == 0){
-      c->last_timeout_check = now;
-      return cfg.timeout;
-    }else{
-      c->last_timeout_check = now;
-    }
-#endif
+
+
 
 
     uint64_t maxAge = now - (cfg.timeout * 1000);
@@ -422,6 +416,20 @@ static int check_timeouts(aeEventLoop *loop, long long id, void *data) {
     printf("Checking timeout at: %lld \n",now );
 #endif
     for (uint64_t i = 0; i < thread->connections; i++, c++) {
+
+#if SME_DBG
+    printf("\tChecking request time out at time  %lld, %lld after last check\n", now, now - c->last_timeout_check );
+#endif
+#if SME_CLIENT 
+            if (c->request_written == 0){
+              c->last_timeout_check = now;
+              //aeCreateFileEvent(thread->loop, c->fd, AE_WRITABLE, socket_writeable, c);
+              //c->request_written == 1;
+              return cfg.timeout;
+            }else{
+              c->last_timeout_check = now;
+            }
+#endif
         if (maxAge > c->start) {
             thread->errors.timeout++;
 #if SME_DBG
@@ -429,8 +437,11 @@ static int check_timeouts(aeEventLoop *loop, long long id, void *data) {
 #endif
 #if SME_CLIENT
             c->all_requests_count++;
+            //if (c->all_requests_count % 101 == 0){
+            reconnect_socket(thread, c);
+            //}
             aeDeleteFileEvent(thread->loop, c->fd, AE_READABLE);
-            aeCreateFileEvent(thread->loop, c->fd, AE_WRITABLE, socket_writeable, c);
+            //aeCreateFileEvent(thread->loop, c->fd, AE_WRITABLE, socket_writeable, c);
 #endif
         }
     }
@@ -497,6 +508,11 @@ static uint64_t usec_to_next_send(connection *c) {
         // We are on pace. Indicate caught_up and don't send now.
         c->caught_up = true;
         send_now = false;
+    }
+    else{
+#if SME_DBG
+      printf("We are behind! \n");
+#endif
     }
 
     //else {
@@ -701,7 +717,7 @@ static void socket_writeable(aeEventLoop *loop, int fd, void *data, int mask) {
     if (!c->written) {
         c->start = time_us();
 #if SME_DBG
-        printf("Sending Request at c->start: %lld\n",c->start);
+        printf("Sending Request on fd: %i at %lld ms after thread start\n", fd, (c->start - thread->start)/1000);
 #endif
         if (!c->has_pending) {
             c->actual_latency_start = c->start;
@@ -724,7 +740,7 @@ static void socket_writeable(aeEventLoop *loop, int fd, void *data, int mask) {
     }
 
 #if SME_DBG
-    printf("Written Request at: %lld\n", time_us());
+    printf("Written Request at: %lld\n", c->start);
 #endif
 #if SME_CLIENT
     c->request_written = 1;
@@ -732,6 +748,9 @@ static void socket_writeable(aeEventLoop *loop, int fd, void *data, int mask) {
     return;
 
   error:
+  #if SME_DBG
+    printf("Error Writing Request on fd: %i at: %lld\n", fd, time_us());
+  #endif
     thread->errors.write++;
     reconnect_socket(thread, c);
 }
@@ -741,6 +760,30 @@ static void socket_readable(aeEventLoop *loop, int fd, void *data, int mask) {
     connection *c = data;
     size_t n;
     uint64_t now = time_us();
+
+
+//    uint64_t maxAge = now - (cfg.timeout * 1000);
+//#if SME_DBG
+//    printf("READING: Checking timeout at: %lld \n",now );
+//#endif
+//    if (maxAge > c->start) {
+//      c->thread->errors.timeout++;
+//#if SME_DBG
+//      printf("READING: A request timed out after %lld, original write at: %lld\n", now - c->latest_write, c->start);
+//#endif
+//#if SME_CLIENT
+//      c->all_requests_count++;
+//      //if (c->all_requests_count % 101 == 0){
+//      reconnect_socket(c->thread, c);
+//      //}
+//      //aeDeleteFileEvent(loop, c->fd, AE_READABLE);
+//      //aeCreateFileEvent(thread->loop, c->fd, AE_WRITABLE, socket_writeable, c);
+//#endif
+//    c->request_written = 0;
+//    goto error;
+//
+//    }
+
 #if SME_DBG
     printf("XReading socket after: %lld \n", now - c->start);
 #endif
