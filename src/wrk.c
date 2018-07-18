@@ -725,6 +725,7 @@ static void socket_writeable(aeEventLoop *loop, int fd, void *data, int mask) {
         if (!c->has_pending) {
             c->actual_latency_start = c->start;
             c->complete_at_last_batch_start = c->complete;
+            c->all_requests_count_at_last_batch_start = c->all_requests_count;
             c->has_pending = true;
         }
         c->pending = cfg.pipeline;
