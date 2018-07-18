@@ -21,10 +21,6 @@
 #define RECVBUF  8192
 #define SAMPLES  100000000
 
-#define SME_CLIENT 1
-#define SME_DBG 0
-
-
 //#if SME_CLIENT
 //#define SOCKET_TIMEOUT_MS   20
 //#define TIMEOUT_INTERVAL_MS 20

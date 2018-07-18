@@ -462,11 +462,13 @@ static int script_wrk_lookup(lua_State *L) {
 
 static int script_wrk_connect(lua_State *L) {
     struct addrinfo *addr = checkaddr(L);
-    int fd, connected = 0;
+    int fd, connected = 1;
+#if !SME_CLIENT
     if ((fd = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol)) != -1) {
         connected = connect(fd, addr->ai_addr, addr->ai_addrlen) == 0;
         close(fd);
     }
+#endif
     lua_pushboolean(L, connected);
     return 1;
 }

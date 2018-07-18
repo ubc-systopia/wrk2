@@ -10,4 +10,8 @@
 #define HAVE_EVPORT
 #endif
 
+#define SME_CLIENT 1
+#define SME_DBG 0
+
+
 #endif /* CONFIG_H */

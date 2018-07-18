@@ -250,6 +250,9 @@ int main(int argc, char **argv) {
         script_done(L, latency_stats, statistics.requests);
     }
 
+#if SME_CLIENT
+    sleep(2);
+#endif
     return 0;
 }
 
