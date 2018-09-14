@@ -329,7 +329,10 @@ static int connect_socket(thread *thread, connection *c) {
 
     flags = fcntl(fd, F_GETFL, 0);
     fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-
+#if SME_CLIENT
+    // TIMEOUT_INTERVAL_MS;
+    c->request_written = 0;
+#endif
     if (connect(fd, addr->ai_addr, addr->ai_addrlen) == -1) {
         if (errno != EINPROGRESS) goto error;
     }
@@ -362,6 +365,9 @@ static int connect_socket(thread *thread, connection *c) {
   error:
     thread->errors.connect++;
     close(fd);
+#if SME_DBG
+    printf("Connection Error");
+#endif
     return -1;
 }
 
@@ -369,6 +375,9 @@ static int reconnect_socket(thread *thread, connection *c) {
     aeDeleteFileEvent(thread->loop, c->fd, AE_WRITABLE | AE_READABLE);
     sock.close(c);
     close(c->fd);
+#if SME_DBG
+    printf("Reconnecting socket");
+#endif
     return connect_socket(thread, c);
 }
 
@@ -804,7 +813,7 @@ static void socket_readable(aeEventLoop *loop, int fd, void *data, int mask) {
 
         if (http_parser_execute(&c->parser, &parser_settings, c->buf, n) != n) goto error;
         c->thread->bytes += n;
-    } while (n == RECVBUF && sock.readable(c) > 0);
+    } while (n == RECVBUF && sock.readable(c) > 0 && (now - c->start < (cfg.timeout*1000)));
 
 #if SME_CLIENT
     // TIMEOUT_INTERVAL_MS;
@@ -815,6 +824,7 @@ static void socket_readable(aeEventLoop *loop, int fd, void *data, int mask) {
   error:
     c->thread->errors.read++;
     reconnect_socket(c->thread, c);
+
 }
 
 static uint64_t time_us() {
