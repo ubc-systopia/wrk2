@@ -290,13 +290,18 @@ void *thread_main(void *arg) {
 #endif
         c->complete   = 0;
         c->caught_up  = true;
+#if SME_CLIENT
+        // Stagger connects 25 msec apart within thread: To lower the ramp up speed
+        aeCreateTimeEvent(loop, i * 25, delayed_initial_connect, c, NULL);
+#else
         // Stagger connects 5 msec apart within thread:
         aeCreateTimeEvent(loop, i * 5, delayed_initial_connect, c, NULL);
+#endif
     }
 
 
 #if SME_CLIENT
-    uint64_t calibrate_delay = CALIBRATE_DELAY_MS ;// + (thread->connections * 5);
+    uint64_t calibrate_delay = CALIBRATE_DELAY_MS; //+ (thread->connections * 25);
     uint64_t timeout_delay = cfg.timeout; // TIMEOUT_INTERVAL_MS; // + (thread->connections * 5);
 #else
     uint64_t calibrate_delay = CALIBRATE_DELAY_MS + (thread->connections * 5);
@@ -433,16 +438,10 @@ static int check_timeouts(aeEventLoop *loop, long long id, void *data) {
     printf("\tChecking request time out at time  %lld, %lld after last check\n", now, now - c->last_timeout_check );
 #endif
 #if SME_CLIENT 
-            if (c->request_written == 0){
-              c->last_timeout_check = now;
-              //aeCreateFileEvent(thread->loop, c->fd, AE_WRITABLE, socket_writeable, c);
-              //c->request_written == 1;
-              return cfg.timeout;
-            }else{
-              c->last_timeout_check = now;
-            }
-#endif
+        if (maxAge > c->start && c->request_written == 1) {
+#else
         if (maxAge > c->start) {
+#endif
             thread->errors.timeout++;
 #if SME_DBG
             printf("A request timed out after %lld, original write at: %lld\n", now - c->latest_write, c->start);
@@ -686,7 +685,9 @@ static void socket_connected(aeEventLoop *loop, int fd, void *data, int mask) {
 
     http_parser_init(&c->parser, HTTP_RESPONSE);
     c->written = 0;
-
+    #if SME_CLIENT
+      c->request_written = 0;
+    #endif
     aeCreateFileEvent(c->thread->loop, fd, AE_READABLE, socket_readable, c);
 
     aeCreateFileEvent(c->thread->loop, fd, AE_WRITABLE, socket_writeable, c);
@@ -819,6 +820,7 @@ static void socket_readable(aeEventLoop *loop, int fd, void *data, int mask) {
     // TIMEOUT_INTERVAL_MS;
     c->request_written = 0;
 #endif
+
     return;
 
   error:
