@@ -438,7 +438,7 @@ static int check_timeouts(aeEventLoop *loop, long long id, void *data) {
     printf("\tChecking request time out at time  %lld, %lld after last check\n", now, now - c->last_timeout_check );
 #endif
 #if SME_CLIENT 
-        if (maxAge > c->start && c->request_written == 1) {
+        if (maxAge > c->start && c->request_written == 1 && (now - c->latest_write) > (cfg.timeout * 1000) ) {
 #else
         if (maxAge > c->start) {
 #endif
