@@ -11,6 +11,7 @@
 #endif
 
 #define SME_CLIENT 1
+#define SME_STAGGER_WORKERS 1
 #define SME_DBG 0
 
 
