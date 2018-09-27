@@ -10,9 +10,25 @@
 #define HAVE_EVPORT
 #endif
 
-#define SME_CLIENT 1
-#define SME_STAGGER_WORKERS 1
-#define SME_DBG 0
 
+#define SME_DBG 0 
+//SME_CLIENT has to be set for all subsequent configurations
+#define SME_CLIENT 1
+
+//Randomized thread start times 
+//(provides a slower warmup phase and adds randomness).
+#define SME_STAGGER_WORKERS 1
+
+//Randomized Inter request delay
+#define SME_RANDOMIZE_IRQ 1
+
+//Asynchronous request generation, as per the open loop assumption
+#define SME_ASYNC_CLIENT 0
+
+// Amount of time to be used for randomization, 
+// If set to x then all randomizations will be +/- x for SME_RANDOMIZE_IRQ 
+// Staggering of clients using SME_STAGGER_WORKERS will be 
+// randomly picked from 0 - RANDOMIZATION_US
+#define RANDOMIZATION_US 25000
 
 #endif /* CONFIG_H */

@@ -2,6 +2,7 @@
 #define WRK_H
 
 #include "config.h"
+#include "list.h"
 #include <pthread.h>
 #include <inttypes.h>
 #include <sys/types.h>
@@ -31,7 +32,6 @@
 #define CALIBRATE_DELAY_MS  10000
 
 
-
 typedef struct {
     pthread_t thread;
     aeEventLoop *loop;
@@ -41,6 +41,7 @@ typedef struct {
     uint64_t stop_at;
 #if SME_CLIENT
     uint64_t start_at;
+    int id;
 #endif
     uint64_t complete;
     uint64_t requests;
@@ -89,10 +90,21 @@ typedef struct connection {
     bool has_pending;
     bool caught_up;
 #if SME_CLIENT
+    node_t *head_time;
+    node_t *rand_head_time;
+    node_t *tail_time;
+    node_t *rand_tail_time;
+    uint64_t rand_write_delay;
     bool request_written;
     uint64_t all_requests_count_at_last_batch_start;
     uint64_t all_requests_count;
+    uint64_t all_requests_count_at_calibration;
+    uint64_t all_requests_written_count;
+    uint64_t all_requests_written_count_at_calibration;
+    uint64_t rand_as_of_all_requests_written_count;
     bool just_calibrated;
+    int id;
+    bool connected;
 #endif
     uint64_t last_timeout_check;
     // Internal tracking numbers (used purely for debugging):
