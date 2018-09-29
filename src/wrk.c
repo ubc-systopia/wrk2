@@ -425,7 +425,7 @@ static int reconnect_socket(thread *thread, connection *c) {
     aeDeleteFileEvent(thread->loop, c->fd, AE_WRITABLE | AE_READABLE);
     sock.close(c);
     close(c->fd);
-#if 1//SME_DBG
+#if SME_DBG
     printf("Reconnecting socket %i\n", c->fd);
 #endif
     return connect_socket(thread, c);
