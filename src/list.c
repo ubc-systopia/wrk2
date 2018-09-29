@@ -2,9 +2,9 @@
 
 
 //Always Insert at tail
-struct node* insert(uint64_t item, node_t** head, node_t** tail)
+node_t* insert(uint64_t item, node_t** head, node_t** tail)
 {
-    struct node *ptr = (struct node*) malloc(sizeof(struct node));
+    node_t *ptr = (node_t*) malloc(sizeof(node_t));
     ptr->item = item;
     ptr->next = NULL;
 #if SME_DBG
@@ -31,7 +31,7 @@ uint64_t delete(node_t** head, node_t** tail)
     if (NULL == *head) {
         return -1;
     } else {
-        struct node *ptr = *head;
+        node_t *ptr = *head;
         uint64_t item = ptr->item;
         *head = ptr->next;
         if (NULL == *head) {
@@ -61,8 +61,8 @@ uint64_t peak(node_t *node){
 }
 
 void delete_all(node_t** head, node_t** tail){
-    struct node *ptr = *head;
-    struct node *ptr_next = *head;
+    node_t *ptr = *head;
+    node_t *ptr_next = *head;
 
     while (NULL != ptr_next) {
         ptr_next = ptr->next;
@@ -72,7 +72,7 @@ void delete_all(node_t** head, node_t** tail){
 
 void list(node_t** head, node_t** tail)
 {
-    struct node *ptr = *head;
+    node_t *ptr = *head;
 
     while (NULL != ptr) {
         printf("%lu ", ptr->item);
