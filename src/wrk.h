@@ -42,6 +42,7 @@ typedef struct {
 #if SME_CLIENT
     uint64_t start_at;
     int id;
+    errors errors_at_calibration;
 #endif
     uint64_t complete;
     uint64_t requests;

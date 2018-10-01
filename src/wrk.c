@@ -180,8 +180,11 @@ int main(int argc, char **argv) {
 #endif
     uint64_t complete = 0;
 #if SME_CLIENT
+    uint64_t post_warmup_total_reqs_count = 0;
     uint64_t total_reqs_count = 0;
+    uint64_t post_warmup_total_reqs_written_count = 0;
     uint64_t total_reqs_written_count = 0;
+    errors post_warmup_errors     = { 0 };
 #endif
     uint64_t bytes    = 0;
     errors errors     = { 0 };
@@ -204,14 +207,26 @@ int main(int argc, char **argv) {
         bytes    += t->bytes;
 #if SME_CLIENT
         for(uint64_t j = 0; j < t-> connections; j++){
-          total_reqs_count += t->cs[j].all_requests_count - t->cs[j].all_requests_count_at_calibration;
-          total_reqs_written_count += t->cs[j].all_requests_written_count - t->cs[j].all_requests_written_count_at_calibration;
+          post_warmup_total_reqs_count += t->cs[j].all_requests_count - t->cs[j].all_requests_count_at_calibration;
+          total_reqs_count += t->cs[j].all_requests_count;
+
+          post_warmup_total_reqs_written_count += t->cs[j].all_requests_written_count - t->cs[j].all_requests_written_count_at_calibration;
+          total_reqs_written_count += t->cs[j].all_requests_written_count;
 #if SME_ASYNC_CLIENT
           //printf("Freeing_up_queues\n");
           delete_all(&(t->cs[j].head_time), &(t->cs[j].tail_time));
           delete_all(&(t->cs[j].rand_head_time), &(t->cs[j].rand_tail_time));
 #endif
         }
+#endif
+#if SME_CLIENT
+
+        post_warmup_errors.connect += t->errors.connect - t->errors_at_calibration.connect;
+        post_warmup_errors.read    += t->errors.read - t->errors_at_calibration.read;
+        post_warmup_errors.write   += t->errors.write - t->errors_at_calibration.write;
+        post_warmup_errors.timeout += t->errors.timeout - t->errors_at_calibration.timeout;
+        post_warmup_errors.status  += t->errors.status - t->errors_at_calibration.status;
+
 #endif
         errors.connect += t->errors.connect;
         errors.read    += t->errors.read;
@@ -226,8 +241,11 @@ int main(int argc, char **argv) {
     long double runtime_s   = runtime_us / 1000000.0;
 #if SME_CLIENT
 //    long double warm_runtime_s = runtime_us / 1000000.0 - CALIBRATE_DELAY_MS/1000;
+//    I am not using the actual time it took to reach here because it adds more time than
+//    the actual time requests were allowed to happen. A minimum runtime of 1 sec is used as a default
     long double warm_runtime_s = (cfg.duration - CALIBRATE_DELAY_MS/1000.0) <= 1 ? 1 : (cfg.duration - CALIBRATE_DELAY_MS/1000.0);
-    long double all_req_per_s   = total_reqs_count   / warm_runtime_s;
+    long double post_warmup_all_req_per_s   = post_warmup_total_reqs_count   / warm_runtime_s;
+    long double all_req_per_s   = total_reqs_count   / runtime_s;
 #endif
     long double req_per_s   = complete   / runtime_s;
     long double bytes_per_s = bytes      / runtime_s;
@@ -260,20 +278,32 @@ int main(int argc, char **argv) {
     printf("  %"PRIu64" requests in %s, %sB read\n",
             complete, runtime_msg, format_binary(bytes));
     if (errors.connect || errors.read || errors.write || errors.timeout) {
-        printf("  Socket errors: connect %d, read %d, write %d, timeout %d\n",
+
+#if SME_CLIENT
+        printf("  Post Warmup: Socket errors: connect %d, read %d, write %d, timeout %d \n",
+               post_warmup_errors.connect, post_warmup_errors.read, post_warmup_errors.write, post_warmup_errors.timeout);
+#endif
+        printf("  Socket errors: connect %d, read %d, write %d, timeout %d \n",
                errors.connect, errors.read, errors.write, errors.timeout);
     }
 
     if (errors.status) {
+#if SME_CLIENT
+        printf("  Post Warmup:  Non-2xx or 3xx responses: %d\n", post_warmup_errors.status);
+#endif
         printf("  Non-2xx or 3xx responses: %d\n", errors.status);
     }
 
 #if SME_CLIENT
     printf("\n Experiment Duration : %lu, Configured Warmup time:  %d, Post Warmup time: %lf \n", cfg.duration , CALIBRATE_DELAY_MS/1000,(cfg.duration - CALIBRATE_DELAY_MS/1000.0));
-    printf("Post Warmup: Total Requests (incl timeouts): %"PRIu64"\n", total_reqs_count);
-    printf("Post Warmup: Total Requests Written(incl timeouts): %"PRIu64"\n", total_reqs_written_count);
-    printf("Post Warmup: Total Requests/sec: %9.2Lf\n", all_req_per_s);
-    printf("Post Warmup time: %9.2Lf\n", warm_runtime_s);
+    printf("Post Warmup: Total Requests (incl timeouts): %"PRIu64"\n", post_warmup_total_reqs_count);
+    printf("Post Warmup: Total Requests Written(incl timeouts): %"PRIu64"\n", post_warmup_total_reqs_written_count);
+    printf("Post Warmup: Total Requests/sec (incl timeouts): %9.2Lf\n", post_warmup_all_req_per_s);
+//    printf("Post Warmup time: %9.2Lf\n", warm_runtime_s);
+
+    printf("Total Requests (incl timeouts): %"PRIu64"\n", total_reqs_count);
+    printf("Total Requests Written(incl timeouts): %"PRIu64"\n", total_reqs_written_count);
+    printf("Total Requests/sec (incl timeouts): %9.2Lf\n", all_req_per_s);
 #endif
     printf("Requests/sec: %9.2Lf\n", req_per_s);
     printf("Transfer/sec: %10sB\n", format_binary(bytes_per_s));
@@ -462,6 +492,8 @@ static int calibrate(aeEventLoop *loop, long long id, void *data) {
 //       thread->cs[j].just_calibrated = 1;
 //       thread->cs[j].all_requests_count_at_last_batch_start = 0;
     }
+    memcpy(&thread->errors_at_calibration,&thread->errors,sizeof(errors)); //shallow copy of s1 INTO s2?
+
 #endif
   
     thread->interval = interval;
