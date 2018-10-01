@@ -521,11 +521,14 @@ static int check_timeouts(aeEventLoop *loop, long long id, void *data) {
     for (uint64_t i = 0; i < thread->connections; i++, c++) {
 
 #if SME_DBG
-    printf("\tChecking request time out at time  %lu, %lu after last check\n", now, now - c->last_timeout_check );
+    printf("\tChecking request time out at time  %lu, %lu after last check, requests_written? %d \n", now, now - c->last_timeout_check,  c->request_written );
 #endif
 
-#if SME_CLIENT 
-        if (maxAge > c->start && c->request_written == 1 && (now - c->latest_write) > (cfg.timeout * 1000) ) {
+#if SME_CLIENT && !SME_ASYNC_CLIENT
+        if (maxAge > c->start && c->request_written == 1 ) {
+#elif SME_CLIENT && SME_ASYNC_CLIENT
+// If the client is ASYNC, we should compare to the earlilest request written
+        if (maxAge > peak(c->head_time) && c->request_written == 1 ) {
 #else
         if (maxAge > c->start) {
 #endif
@@ -991,11 +994,16 @@ static void socket_readable(aeEventLoop *loop, int fd, void *data, int mask) {
 
         if (http_parser_execute(&c->parser, &parser_settings, c->buf, n) != n) goto error;
         c->thread->bytes += n;
-    } while (n == RECVBUF && sock.readable(c) > 0 ); //&& (now - c->start < (cfg.timeout*1000)));
+    } while (n == RECVBUF && sock.readable(c) > 0 ); //&& (now - c->start < (cfg.timeout*1000) ));
 
-#if SME_CLIENT
+#if SME_CLIENT && !SME_ASYNC_CLIENT
     // TIMEOUT_INTERVAL_MS;
     c->request_written = 0;
+#elif SME_CLIENT && SME_ASYNC_CLIENT
+   if (peak(c->head_time) == -1){
+      c->request_written = 0;
+   }
+
 #endif
 
     return;
