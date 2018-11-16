@@ -125,7 +125,14 @@ int main(int argc, char **argv) {
     uint64_t stop_at     = time_us() + (cfg.duration * 1000000);
 
 #if SME_CLIENT
-    printf("Per thread Xput: %lf, Rate: %lf, Thread count %"PRIu64" \n", throughput, (double)cfg.rate, cfg.threads);
+    printf("=== SME Paced Client ===\nPer thread Xput: %lf, Rate: %lf, Thread count %"PRIu64" \n", throughput, (double)cfg.rate, cfg.threads);
+    printf("Asyncronous client? %s \n Randomised Start Of Threads +[0, %d]? %s \n Randomised Inter Request spacing +- %d? %s \n ----------------------- \n", 
+        SME_ASYNC_CLIENT? "TRUE" :"FALSE", 
+        RANDOMIZATION_US,
+        SME_STAGGER_WORKERS?  "TRUE" : "FALSE",
+        RANDOMIZATION_US,
+        SME_RANDOMIZE_IRQ? "TRUE" : "FALSE"
+        );
     uint64_t start    = time_us();
 #endif
 
@@ -240,10 +247,11 @@ int main(int argc, char **argv) {
 
     long double runtime_s   = runtime_us / 1000000.0;
 #if SME_CLIENT
+    runtime_s = runtime_s < cfg.duration? runtime_s : cfg.duration;
 //    long double warm_runtime_s = runtime_us / 1000000.0 - CALIBRATE_DELAY_MS/1000;
 //    I am not using the actual time it took to reach here because it adds more time than
 //    the actual time requests were allowed to happen. A minimum runtime of 1 sec is used as a default
-    long double warm_runtime_s = (cfg.duration - CALIBRATE_DELAY_MS/1000.0) <= 1 ? 1 : (cfg.duration - CALIBRATE_DELAY_MS/1000.0);
+    long double warm_runtime_s = (runtime_s - CALIBRATE_DELAY_MS/1000.0) <= 1 ? 1 : (runtime_s - CALIBRATE_DELAY_MS/1000.0);
     long double post_warmup_all_req_per_s   = post_warmup_total_reqs_count   / warm_runtime_s;
     long double all_req_per_s   = total_reqs_count   / runtime_s;
 #endif
@@ -418,6 +426,13 @@ static int connect_socket(thread *thread, connection *c) {
 
     flags = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flags, sizeof(flags));
+    struct sockaddr_in sin;
+    socklen_t len = sizeof(sin);
+    if (getsockname(fd, (struct sockaddr *)&sin, &len) == -1)
+      perror("getsockname");
+    else
+      printf("port number of fd %d is %d\n", fd, ntohs(sin.sin_port));
+
 
 #if SME_CLIENT
     struct timeval tv;
@@ -521,29 +536,35 @@ static int check_timeouts(aeEventLoop *loop, long long id, void *data) {
     for (uint64_t i = 0; i < thread->connections; i++, c++) {
 
 #if SME_DBG
-    printf("\tChecking request time out at time  %lu, %lu after last check, requests_written? %d \n", now, now - c->last_timeout_check,  c->request_written );
+    printf("\tChecking request time out at time  %lu, %lu after last check, requests_written? %d, maxAge %lu, c->start %lu, c->latest_write %lu, req_timed_out? %d, should stop? %d\n",
+        now, now - c->last_timeout_check,  c->request_written, maxAge, c->start, c->latest_write,  maxAge > c->start, thread->stop_at < now );
+    c->last_timeout_check = now;
 #endif
 
 #if SME_CLIENT && !SME_ASYNC_CLIENT
-        if (maxAge > c->start && c->request_written == 1 ) {
+        if (maxAge > c->start && c->request_written == 1 && (now - c->latest_write) > (cfg.timeout * 1000)) {
 #elif SME_CLIENT && SME_ASYNC_CLIENT
 // If the client is ASYNC, we should compare to the earlilest request written
-        if (maxAge > peak(c->head_time) && c->request_written == 1 ) {
+        if (maxAge > peak(c->head_time) && c->request_written == 1 && thread->stop_at > now) {
 #else
         if (maxAge > c->start) {
 #endif
             thread->errors.timeout++;
-#if SME_DBG
-            printf("A request timed out after %lu, original write at: %lu\n", now - c->latest_write, c->start);
+#if 1//SME_DBG
+
+            printf("A request timed out on fd %d after %lu, original write at: %lu\n", c->fd, now - c->latest_write, c->start);
+            printf("\tChecking request time out at time  %lu, %lu after last check, requests_written? %d, maxAge %lu, c->start %lu, c->latest_write %lu, req_timed_out? %d, should stop? %d\n",
+        now, now - c->last_timeout_check,  c->request_written, maxAge, c->start, c->latest_write,  maxAge > c->start, thread->stop_at < now );
 #endif
 
 #if SME_CLIENT
             c->all_requests_count++;
+            //stop = 1;
             //if (c->all_requests_count % 101 == 0){
             reconnect_socket(thread, c);
             //}
-            aeDeleteFileEvent(thread->loop, c->fd, AE_READABLE);
-            //aeCreateFileEvent(thread->loop, c->fd, AE_WRITABLE, socket_writeable, c);
+            //aeDeleteFileEvent(thread->loop, c->fd, AE_READABLE);
+            //aeDeleteFileEvent(thread->loop, c->fd, AE_WRITABLE);
 #endif
         }
     }
