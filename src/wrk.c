@@ -555,7 +555,7 @@ static int check_timeouts(aeEventLoop *loop, long long id, void *data) {
         if (maxAge > c->start) {
 #endif
             thread->errors.timeout++;
-#if 1//SME_DBG
+#if SME_DBG
 
             printf("A request timed out on fd %d after %lu, original write at: %lu\n", c->fd, now - c->latest_write, c->start);
             printf("\tChecking request time out at time  %lu, %lu after last check, requests_written? %d, maxAge %lu, c->start %lu, c->latest_write %lu, req_timed_out? %d, should stop? %d thread->start %lu\n",
