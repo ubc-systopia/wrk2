@@ -32,7 +32,9 @@ static int connect_socket(thread *, connection *);
 static int reconnect_socket(thread *, connection *);
 
 static int calibrate(aeEventLoop *, long long, void *);
+#if !SME_CLIENT
 static int sample_rate(aeEventLoop *, long long, void *);
+#endif
 static int delayed_initial_connect(aeEventLoop *, long long, void *);
 static int check_timeouts(aeEventLoop *, long long, void *);
 
@@ -51,7 +53,10 @@ static int parse_args(struct config *, char **, struct http_parser_url *, char *
 static char *copy_url_part(char *, struct http_parser_url *, enum http_parser_url_fields);
 static void print_stats_header();
 static void print_stats(char *, stats *, char *(*)(long double));
+
+#if !SME_CLIENT
 static void print_stats_latency(stats *);
+#endif
 static void print_hdr_latency(struct hdr_histogram*, const char*);
 
 #endif /* MAIN_H */

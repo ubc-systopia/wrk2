@@ -19,15 +19,15 @@
 #include "hdr_histogram.h"
 
 #define VERSION  "4.0.0"
-#define RECVBUF  8192
+#define RECVBUF  8192 //65536
 #define SAMPLES  100000000
 
 //#if SME_CLIENT
 //#define SOCKET_TIMEOUT_MS   20
 //#define TIMEOUT_INTERVAL_MS 20
 //#else
-#define SOCKET_TIMEOUT_MS   2000
-#define TIMEOUT_INTERVAL_MS 2000
+#define SOCKET_TIMEOUT_MS   60000
+#define TIMEOUT_INTERVAL_MS 60000
 //#endif
 #define CALIBRATE_DELAY_MS  10000
 

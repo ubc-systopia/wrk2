@@ -23,12 +23,13 @@
 #define SME_RANDOMIZE_IRQ 1
 
 //Asynchronous request generation, as per the open loop assumption
-#define SME_ASYNC_CLIENT 0
+#define SME_ASYNC_CLIENT 1
 
 // Amount of time to be used for randomization, 
-// If set to x then all randomizations will be +/- x for SME_RANDOMIZE_IRQ 
+// OLD: If set to x then all randomizations will be +/- x for SME_RANDOMIZE_IRQ 
+// NEW: If set to x then all randomizations will be + x for SME_RANDOMIZE_IRQ 
 // Staggering of clients using SME_STAGGER_WORKERS will be 
 // randomly picked from 0 - RANDOMIZATION_US
-#define RANDOMIZATION_US 25000
+#define RANDOMIZATION_US 12500
 
 #endif /* CONFIG_H */

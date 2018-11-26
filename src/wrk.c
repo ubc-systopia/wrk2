@@ -126,7 +126,7 @@ int main(int argc, char **argv) {
 
 #if SME_CLIENT
     printf("=== SME Paced Client ===\nPer thread Xput: %lf, Rate: %lf, Thread count %"PRIu64" \n", throughput, (double)cfg.rate, cfg.threads);
-    printf("Asyncronous client? %s \n Randomised Start Of Threads +[0, %d]? %s \n Randomised Inter Request spacing +- %d? %s \n ----------------------- \n", 
+    printf("Asyncronous client? %s \n Randomised Start Of Threads +[0, %d]? %s \n Randomised Inter Request spacing +[0, %d]? %s \n ----------------------- \n", 
         SME_ASYNC_CLIENT? "TRUE" :"FALSE", 
         RANDOMIZATION_US,
         SME_STAGGER_WORKERS?  "TRUE" : "FALSE",
@@ -585,6 +585,7 @@ static int check_timeouts(aeEventLoop *loop, long long id, void *data) {
 #endif
 }
 
+#if !SME_CLIENT
 static int sample_rate(aeEventLoop *loop, long long id, void *data) {
     thread *thread = data;
 
@@ -600,6 +601,7 @@ static int sample_rate(aeEventLoop *loop, long long id, void *data) {
 
     return thread->interval;
 }
+#endif
 
 static int header_field(http_parser *parser, const char *at, size_t len) {
     connection *c = parser->data;
@@ -646,7 +648,8 @@ static uint64_t usec_to_next_send(connection *c) {
 #if SME_CLIENT && SME_RANDOMIZE_IRQ
     uint64_t next_random;
     if ( c->all_requests_written_count == c->rand_as_of_all_requests_written_count) {
-      next_random = rand() % (2*RANDOMIZATION_US);
+      next_random = rand() % (RANDOMIZATION_US);
+      //next_random = rand() % (2*RANDOMIZATION_US);
 
 #if SME_CLIENT && SME_ASYNC_CLIENT
       insert(next_random, &(c->rand_head_time), &(c->rand_tail_time));
@@ -663,7 +666,8 @@ static uint64_t usec_to_next_send(connection *c) {
 #endif
 
     }
-    next_start_time = next_start_time - RANDOMIZATION_US + next_random;
+    //next_start_time = next_start_time - RANDOMIZATION_US + next_random;
+    next_start_time = next_start_time + next_random;
 #if SME_DBG
     printf("Req on fd %d, next_random = %lu next_start_time %lu all_req_count %lu \n", c->fd, next_random, next_start_time, c->all_requests_count);
 #endif
@@ -702,7 +706,7 @@ static int delay_request(aeEventLoop *loop, long long id, void *data) {
     aeCreateFileEvent(c->thread->loop, c->fd, AE_WRITABLE, socket_writeable, c); 
 #if SME_CLIENT && SME_ASYNC_CLIENT
 #if SME_RANDOMIZE_IRQ
-    double delay_for_next = 1000/(c->throughput*1000000) - RANDOMIZATION_US;
+    double delay_for_next = 1000/(c->throughput*1000000);// - RANDOMIZATION_US;
 #else 
     double delay_for_next = 1000/(c->throughput*1000000);
 #endif
@@ -772,11 +776,12 @@ static int response_complete(http_parser *parser) {
 #elif SME_CLIENT
       uint64_t req_random = c->rand_write_delay; 
 #endif
-    expected_latency_start = expected_latency_start - RANDOMIZATION_US + req_random;
+    //expected_latency_start = expected_latency_start - RANDOMIZATION_US + req_random;
+    expected_latency_start = expected_latency_start + req_random;
 #if SME_DBG
     printf("Req on fd %d, Req_random = %lu, expected_latency_start %lu, actual_start %lu \n", c->fd, req_random, expected_latency_start, c->start);
 #endif
-    int64_t expected_latency_timing = now - expected_latency_start ;
+    int64_t expected_latency_timing = now - expected_latency_start;
 #else
 
     int64_t expected_latency_timing = now - expected_latency_start;
@@ -913,7 +918,7 @@ static void socket_connected(aeEventLoop *loop, int fd, void *data, int mask) {
 
 #if SME_CLIENT && SME_ASYNC_CLIENT
 #if SME_RANDOMIZE_IRQ
-    uint64_t req_delay = 1000/(c->throughput*1000000) - RANDOMIZATION_US;
+    uint64_t req_delay = 1000/(c->throughput*1000000); //- RANDOMIZATION_US;
 #else 
     uint64_t req_delay = 1000/(c->throughput*1000000);
 #endif
@@ -975,9 +980,7 @@ static void socket_writeable(aeEventLoop *loop, int fd, void *data, int mask) {
             c->complete_at_last_batch_start = c->complete;
 
 #if SME_CLIENT
-
             c->all_requests_count_at_last_batch_start = c->all_requests_count;
-            
 #endif
         }
 #if SME_DBG
@@ -1251,6 +1254,7 @@ static void print_hdr_latency(struct hdr_histogram* histogram, const char* descr
     hdr_percentiles_print(histogram, stdout, 5, 1000.0, CLASSIC);
 }
 
+#if !SME_CLIENT
 static void print_stats_latency(stats *stats) {
     long double percentiles[] = { 50.0, 75.0, 90.0, 99.0, 99.9, 99.99, 99.999, 100.0 };
     printf("  Latency Distribution\n");
@@ -1262,3 +1266,4 @@ static void print_stats_latency(stats *stats) {
         printf("\n");
     }
 }
+#endif
