@@ -699,14 +699,16 @@ static uint64_t usec_to_next_send(connection *c) {
 static int delay_request(aeEventLoop *loop, long long id, void *data) {
     connection* c = data;
     uint64_t time_usec_to_wait = usec_to_next_send(c);
+    //printf("delay_req1 Time = %lu\n", time_us());
     if (time_usec_to_wait) {
         return round((time_usec_to_wait / 1000.0L) ); /* don't send, wait */
     }
 //    aeCreateFileEvent(c->thread->loop, c->fd, AE_READABLE, socket_readable, c);
+    //printf("delay_req2 Time = %lu\n", time_us());
     aeCreateFileEvent(c->thread->loop, c->fd, AE_WRITABLE, socket_writeable, c); 
 #if SME_CLIENT && SME_ASYNC_CLIENT
 #if SME_RANDOMIZE_IRQ
-    double delay_for_next = 1000/(c->throughput*1000000);// - RANDOMIZATION_US;
+    double delay_for_next = 500/(c->throughput*1000000);// - RANDOMIZATION_US;
 #else 
     double delay_for_next = 1000/(c->throughput*1000000);
 #endif
@@ -917,13 +919,10 @@ static void socket_connected(aeEventLoop *loop, int fd, void *data, int mask) {
     #endif
 
 #if SME_CLIENT && SME_ASYNC_CLIENT
-#if SME_RANDOMIZE_IRQ
-    uint64_t req_delay = 1000/(c->throughput*1000000); //- RANDOMIZATION_US;
-#else 
-    uint64_t req_delay = 1000/(c->throughput*1000000);
-#endif
     aeCreateFileEvent(c->thread->loop, fd, AE_READABLE, socket_readable, c);
-    aeCreateTimeEvent(c->thread->loop, req_delay, delay_request, c, NULL);
+    //printf("sock_connected Time = %lu \n", time_us());
+    aeCreateTimeEvent(c->thread->loop, 0, delay_request, c, NULL);
+    //aeCreateTimeEvent(c->thread->loop, req_delay, delay_request, c, NULL);
 #else
     aeCreateFileEvent(c->thread->loop, fd, AE_READABLE, socket_readable, c);
     aeCreateFileEvent(c->thread->loop, fd, AE_WRITABLE, socket_writeable, c);
