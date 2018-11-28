@@ -562,8 +562,8 @@ static int check_timeouts(aeEventLoop *loop, long long id, void *data) {
         now, now - c->last_timeout_check,  c->request_written, maxAge, c->start, c->latest_write,  maxAge > c->start, thread->stop_at < now, now - thread->start);
 #endif
 
-#if SME_CLIENT
             c->all_requests_count++;
+#if SME_CLIENT && !SME_ASYNC_CLIENT
             //stop = 1;
             //if (c->all_requests_count % 101 == 0){
             reconnect_socket(thread, c);
