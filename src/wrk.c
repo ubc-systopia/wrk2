@@ -10,6 +10,9 @@
 #define MAX_LATENCY 24L * 60 * 60 * 1000000
 
 static struct config {
+#if SME_CLIENT
+    uint64_t num_reqs;
+#endif
     uint64_t threads;
     uint64_t connections;
     uint64_t duration;
@@ -57,6 +60,7 @@ static void usage() {
            "    -t, --threads     <N>  Number of threads to use   \n"
            "                                                      \n"
            "    -s, --script      <S>  Load Lua script file       \n"
+           "    -n, --num_reqs    <N>  Max #reqs per conn.        \n"
            "    -H, --header      <H>  Add header to request      \n"
            "    -L  --latency          Print latency statistics   \n"
            "    -U  --u_latency        Print uncorrected latency statistics\n"
@@ -876,7 +880,14 @@ static int response_complete(http_parser *parser) {
     }
 #endif
     }
+#if SME_CLIENT
+//    printf("Total number of reqs so far is: %lu, max allowed is %lu \n", c->all_requests_written_count, cfg.num_reqs);
+    if (c->all_requests_written_count >= cfg.num_reqs){
+        aeStop(thread->loop);
+        goto done;
+    }
 
+#endif
 #if ! (SME_CLIENT && SME_ASYNC_CLIENT)
     if (--c->pending == 0) {
         c->has_pending = false;
@@ -946,6 +957,18 @@ static void socket_writeable(aeEventLoop *loop, int fd, void *data, int mask) {
     thread *thread = c->thread;
 #if SME_DBG
     uint64_t now = time_us();
+#endif
+
+
+#if SME_CLIENT
+//    printf("Total number of reqs so far is: %lu, max allowed is %lu \n", c->all_requests_written_count, cfg.num_reqs);
+    if (c->all_requests_written_count >= cfg.num_reqs){
+        aeDeleteFileEvent(loop, fd, AE_WRITABLE);
+
+//        aeStop(thread->loop);
+        return;
+    }
+
 #endif
     if (!c->written) {
         uint64_t time_usec_to_wait = usec_to_next_send(c);
@@ -1116,6 +1139,7 @@ static struct option longopts[] = {
     { "duration",       required_argument, NULL, 'd' },
     { "threads",        required_argument, NULL, 't' },
     { "script",         required_argument, NULL, 's' },
+    { "num_reqs",       required_argument, NULL, 'n' },
     { "header",         required_argument, NULL, 'H' },
     { "latency",        no_argument,       NULL, 'L' },
     { "u_latency",      no_argument,       NULL, 'U' },
@@ -1138,8 +1162,8 @@ static int parse_args(struct config *cfg, char **url, struct http_parser_url *pa
     //printf("Timeout Value: = %lld\n", SOCKET_TIMEOUT_MS); 
     cfg->rate        = 0;
     cfg->record_all_responses = true;
-
-    while ((c = getopt_long(argc, argv, "t:c:d:s:H:T:R:LUBrv?", longopts, NULL)) != -1) {
+    cfg->num_reqs = 9223372036854776;
+    while ((c = getopt_long(argc, argv, "t:c:d:s:n:H:T:R:LUBrv?", longopts, NULL)) != -1) {
         switch (c) {
             case 't':
                 if (scan_metric(optarg, &cfg->threads)) return -1;
@@ -1152,6 +1176,9 @@ static int parse_args(struct config *cfg, char **url, struct http_parser_url *pa
                 break;
             case 's':
                 cfg->script = optarg;
+                break;
+            case 'n':
+                if (scan_metric(optarg, &cfg->num_reqs)) return -1;
                 break;
             case 'H':
                 *header++ = optarg;
