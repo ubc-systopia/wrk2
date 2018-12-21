@@ -293,8 +293,10 @@ int main(int argc, char **argv) {
     if (errors.connect || errors.read || errors.write || errors.timeout) {
 
 #if SME_CLIENT
-        printf("  Post Warmup: Socket errors: connect %d, read %d, write %d, timeout %d \n",
-               post_warmup_errors.connect, post_warmup_errors.read, post_warmup_errors.write, post_warmup_errors.timeout);
+        printf("  Post Warmup: Socket errors: connect %d, read %d, write %d"
+            ", timeout %d\n"
+            , post_warmup_errors.connect, post_warmup_errors.read
+            , post_warmup_errors.write, post_warmup_errors.timeout);
 #endif
         printf("  Socket errors: connect %d, read %d, write %d, timeout %d \n",
                errors.connect, errors.read, errors.write, errors.timeout);
@@ -302,22 +304,33 @@ int main(int argc, char **argv) {
 
     if (errors.status) {
 #if SME_CLIENT
-        printf("  Post Warmup:  Non-2xx or 3xx responses: %d\n", post_warmup_errors.status);
+        printf("  Post Warmup: Non-2xx or 3xx responses: %d\n"
+            , post_warmup_errors.status);
 #endif
         printf("  Non-2xx or 3xx responses: %d\n", errors.status);
     }
 
 #if SME_CLIENT
-    printf("\n Experiment Duration : %lu, Configured Warmup time:  %d, Post Warmup time: %lf \n", cfg.duration , CALIBRATE_DELAY_MS/1000,(cfg.duration - CALIBRATE_DELAY_MS/1000.0));
-    printf("Post Warmup: Total Requests (incl timeouts): %"PRIu64"\n", post_warmup_total_reqs_count);
-    printf("Post Warmup: Total Requests Written(incl timeouts): %"PRIu64"\n", post_warmup_total_reqs_written_count);
-    printf("Post Warmup: Total Requests/sec (incl timeouts): %9.2Lf\n", post_warmup_all_req_per_s);
-    printf("Post Warmup: Total Requests/sec: %9.2Lf\n", post_warmup_all_complete_req_per_s);
+    printf("\nExperiment Duration: %lu, Configured Warmup time: %d"
+        ", Post Warmup time: %lf\n"
+        , cfg.duration, CALIBRATE_DELAY_MS/1000
+        , (cfg.duration - CALIBRATE_DELAY_MS/1000.0));
+    printf("Post Warmup: Total Requests (incl timeouts): %"PRIu64"\n"
+        , post_warmup_total_reqs_count);
+    printf("Post Warmup: Total Requests Written(incl timeouts): %"PRIu64"\n"
+        , post_warmup_total_reqs_written_count);
+    printf("Post Warmup: Total Requests/sec (incl timeouts): %9.2Lf\n"
+        , post_warmup_all_req_per_s);
+    printf("Post Warmup: Total Requests/sec: %9.2Lf\n"
+        , post_warmup_all_complete_req_per_s);
 //    printf("Post Warmup time: %9.2Lf\n", warm_runtime_s);
 
-    printf("Total Requests (incl timeouts): %"PRIu64"\n", total_reqs_count);
-    printf("Total Requests Written(incl timeouts): %"PRIu64"\n", total_reqs_written_count);
-    printf("Total Requests/sec (incl timeouts): %9.2Lf\n", all_req_per_s);
+    printf("Total Requests (incl timeouts): %"PRIu64"\n"
+        , total_reqs_count);
+    printf("Total Requests Written(incl timeouts): %"PRIu64"\n"
+        , total_reqs_written_count);
+    printf("Total Requests/sec (incl timeouts): %9.2Lf\n"
+        , all_req_per_s);
 #endif
     printf("Requests/sec: %9.2Lf\n", req_per_s);
     printf("Transfer/sec: %10sB\n", format_binary(bytes_per_s));
