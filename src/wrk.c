@@ -123,7 +123,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "unable to connect to %s:%s %s\n", host, service, msg);
         exit(1);
     }
-    
+
     uint64_t connections = cfg.connections / cfg.threads;
     double throughput    = (double)cfg.rate / cfg.threads;
     uint64_t stop_at     = time_us() + (cfg.duration * 1000000);
@@ -230,8 +230,8 @@ int main(int argc, char **argv) {
 #endif
         }
 #endif
-#if SME_CLIENT
 
+#if SME_CLIENT
         post_warmup_errors.connect += t->errors.connect - t->errors_at_calibration.connect;
         post_warmup_errors.read    += t->errors.read - t->errors_at_calibration.read;
         post_warmup_errors.write   += t->errors.write - t->errors_at_calibration.write;
@@ -395,8 +395,8 @@ void *thread_main(void *arg) {
 #endif
         c->complete   = 0;
         c->caught_up  = true;
-        
-        // Stagger connects 5 msec apart within thread: 
+
+        // Stagger connects 5 msec apart within thread:
         aeCreateTimeEvent(loop, i * 5, delayed_initial_connect, c, NULL);
     }
 
@@ -408,8 +408,7 @@ void *thread_main(void *arg) {
     uint64_t calibrate_delay = CALIBRATE_DELAY_MS + (thread->connections * 5);
     uint64_t timeout_delay = TIMEOUT_INTERVAL_MS + (thread->connections * 5);
 #endif
-    
-    
+
     aeCreateTimeEvent(loop, calibrate_delay, calibrate, thread, NULL);
 
 #if SME_CLIENT
@@ -532,7 +531,7 @@ static int calibrate(aeEventLoop *loop, long long id, void *data) {
     memcpy(&thread->errors_at_calibration,&thread->errors,sizeof(errors)); //shallow copy of s1 INTO s2?
 
 #endif
-  
+
     thread->interval = interval;
     thread->requests = 0;
 
@@ -558,8 +557,11 @@ static int check_timeouts(aeEventLoop *loop, long long id, void *data) {
     for (uint64_t i = 0; i < thread->connections; i++, c++) {
 
 #if SME_DBG
-    printf("\tChecking request time out at time  %lu, %lu after last check, requests_written? %d, maxAge %lu, c->start %lu, c->latest_write %lu, req_timed_out? %d, should stop? %d, fd %d\n",
-        now, now - c->last_timeout_check,  c->request_written, maxAge, c->start, c->latest_write,  maxAge > c->start, thread->stop_at < now , c->fd);
+    printf("\tChecking request time out at time  %lu, %lu after last check"
+        ", requests_written? %d, maxAge %lu, c->start %lu, c->latest_write %lu"
+        ", req_timed_out? %d, should stop? %d, fd %d\n",
+        now, now - c->last_timeout_check,  c->request_written, maxAge, c->start
+        , c->latest_write,  maxAge > c->start, thread->stop_at < now , c->fd);
     c->last_timeout_check = now;
 #endif
 
@@ -573,10 +575,16 @@ static int check_timeouts(aeEventLoop *loop, long long id, void *data) {
 #endif
             thread->errors.timeout++;
 #if SME_DBG
-
-            printf("A request timed out on fd %d after %lu, original write at: %lu\n", c->fd, now - c->latest_write, c->start);
-            printf("\tChecking request time out at time  %lu, %lu after last check, requests_written? %d, maxAge %lu, c->start %lu, c->latest_write %lu, req_timed_out? %d, should stop? %d thread->start %lu\n",
-        now, now - c->last_timeout_check,  c->request_written, maxAge, c->start, c->latest_write,  maxAge > c->start, thread->stop_at < now, now - thread->start);
+            printf("A request timed out on fd %d after %lu"
+                ", original write at: %lu\n"
+                , c->fd, now - c->latest_write, c->start);
+            printf("\tChecking request time out at time  %lu, %lu"
+                " after last check, requests_written? %d, maxAge %lu"
+                ", c->start %lu, c->latest_write %lu, req_timed_out? %d"
+                ", should stop? %d thread->start %lu\n"
+                , now, now - c->last_timeout_check, c->request_written
+                , maxAge, c->start, c->latest_write, maxAge > c->start
+                , thread->stop_at < now, now - thread->start);
 #endif
 
             c->all_requests_count++;
@@ -649,10 +657,13 @@ static int response_body(http_parser *parser, const char *at, size_t len) {
 static uint64_t usec_to_next_send(connection *c) {
     uint64_t now = time_us();
 #if SME_CLIENT && SME_ASYNC_CLIENT
-//    srand(c->id + c->all_requests_written_count);
-    uint64_t next_start_time = c->thread_start + (c->all_requests_written_count / c->throughput); 
+    uint64_t next_start_time = c->thread_start
+      + (c->all_requests_written_count / c->throughput);
 #if SME_DBG
-    printf("Next_start_time for c id: %d, fd: %d at time %ld, all_requests_written_count: %lu, idx: %lu \n", c->id, c->fd, next_start_time, c->all_requests_written_count, c->id + c->all_requests_written_count);
+    printf("Next_start_time for c id: %d, fd: %d at time %ld"
+        ", all_requests_written_count: %lu, idx: %lu \n"
+        , c->id, c->fd, next_start_time, c->all_requests_written_count
+        , c->id + c->all_requests_written_count);
 #endif
 
 #elif SME_CLIENT
@@ -664,29 +675,30 @@ static uint64_t usec_to_next_send(connection *c) {
 
 #if SME_CLIENT && SME_RANDOMIZE_IRQ
     uint64_t next_random;
-    if ( c->all_requests_written_count == c->rand_as_of_all_requests_written_count) {
-      next_random = rand() % (RANDOMIZATION_US);
-      //next_random = rand() % (2*RANDOMIZATION_US);
+    if (c->all_requests_written_count == c->rand_as_of_all_requests_written_count) {
+      next_random = rand() % (REQUEST_RANDOMIZATION_US);
+      //next_random = rand() % (2*REQUEST_RANDOMIZATION_US);
 
 #if SME_CLIENT && SME_ASYNC_CLIENT
       insert(next_random, &(c->rand_head_time), &(c->rand_tail_time));
 #elif SME_CLIENT
       c->rand_write_delay = next_random;
 #endif
-      c->rand_as_of_all_requests_written_count = c->all_requests_written_count + 1; 
-    }else{
+      c->rand_as_of_all_requests_written_count = c->all_requests_written_count + 1;
+    } else {
 
 #if SME_CLIENT && SME_ASYNC_CLIENT
       next_random = peak(c->rand_tail_time);
 #elif SME_CLIENT
-      next_random = c->rand_write_delay; 
+      next_random = c->rand_write_delay;
 #endif
 
     }
-    //next_start_time = next_start_time - RANDOMIZATION_US + next_random;
+
     next_start_time = next_start_time + next_random;
 #if SME_DBG
-    printf("Req on fd %d, next_random = %lu next_start_time %lu all_req_count %lu \n", c->fd, next_random, next_start_time, c->all_requests_count);
+    printf("Req on fd %d, next_random %lu next_start_time %lu all_req_count %lu\n"
+        , c->fd, next_random, next_start_time, c->all_requests_count);
 #endif
 #endif
 
@@ -696,12 +708,17 @@ static uint64_t usec_to_next_send(connection *c) {
         c->caught_up = true;
         send_now = false;
 #if SME_CLIENT && SME_DBG
-      printf("We are Good! by %lld, time now : %lld, thread started at: %lld, total requests count: %d, xput %lf , next start time: %lld \n", next_start_time - now, now, c->thread_start, c->all_requests_count, c->throughput, next_start_time);
+      printf("We are Good! by %lld, time now : %lld, thread started at: %lld"
+          ", total requests count: %d, xput %lf , next start time: %lld\n"
+          , next_start_time - now, now, c->thread_start, c->all_requests_count
+          , c->throughput, next_start_time);
 #endif
-    }
-    else{
+    } else {
 #if SME_CLIENT && SME_DBG
-      printf("We are behind by %lld, time now : %lld, thread started at: %lld, total requests count: %d, xput %lf , next start time: %lld \n", now-next_start_time, now, c->thread_start, c->all_requests_count, c->throughput, next_start_time);
+      printf("We are behind by %lld, time now : %lld, thread started at: %lld"
+          ", total requests count: %d, xput %lf , next start time: %lld\n"
+          , now-next_start_time, now, c->thread_start, c->all_requests_count
+          , c->throughput, next_start_time);
 #endif
     }
 
@@ -716,20 +733,17 @@ static uint64_t usec_to_next_send(connection *c) {
 static int delay_request(aeEventLoop *loop, long long id, void *data) {
     connection* c = data;
     uint64_t time_usec_to_wait = usec_to_next_send(c);
-    //printf("delay_req1 Time = %lu\n", time_us());
     if (time_usec_to_wait) {
         return round((time_usec_to_wait / 1000.0L) ); /* don't send, wait */
     }
 //    aeCreateFileEvent(c->thread->loop, c->fd, AE_READABLE, socket_readable, c);
-    //printf("delay_req2 Time = %lu\n", time_us());
-    aeCreateFileEvent(c->thread->loop, c->fd, AE_WRITABLE, socket_writeable, c); 
+    aeCreateFileEvent(c->thread->loop, c->fd, AE_WRITABLE, socket_writeable, c);
 #if SME_CLIENT && SME_ASYNC_CLIENT
 #if SME_RANDOMIZE_IRQ
     double delay_for_next = 500/(c->throughput*1000000);// - RANDOMIZATION_US;
 #else 
     double delay_for_next = 1000/(c->throughput*1000000);
 #endif
-    //printf("Inter request delay per connection is: %lf ms, we wake up after %lf\n", 1000/(c->throughput*1000000), delay_for_next);
     return (delay_for_next < 1)? 1: (int)delay_for_next; //
 #else
     return AE_NOMORE;
@@ -742,7 +756,8 @@ static int response_complete(http_parser *parser) {
     uint64_t now = time_us();
     int status = parser->status_code;
 #if SME_DBG
-    printf("Response recieved on fd %d for req %lu at time: %lld took %lu\n", c->fd, c->start, now, now - c->start);
+    printf("Response recieved on fd %d for req %lu at time: %lld took %lu\n"
+        , c->fd, c->start, now, now - c->start);
 
 #endif
     thread->complete++;
@@ -757,7 +772,8 @@ static int response_complete(http_parser *parser) {
         script_response(thread->L, status, &c->headers, &c->body);
         c->state = FIELD;
     }
-// Count all responses (including pipelined ones:)
+
+    // Count all responses (including pipelined ones:)
     c->complete++;
 #if SME_CLIENT
     c->all_requests_count++;
@@ -781,7 +797,7 @@ static int response_complete(http_parser *parser) {
 //    uint64_t expected_latency_start = c->thread_start +
 //            ((c->all_requests_count - 1) / c->throughput);
 #if SME_CLIENT
-    uint64_t expected_latency_start = c->thread_start + 
+    uint64_t expected_latency_start = c->thread_start +
             ((c->all_requests_count -1 )/ c->throughput);
 #else
     uint64_t expected_latency_start = c->thread_start +
@@ -791,14 +807,16 @@ static int response_complete(http_parser *parser) {
 #if SME_CLIENT && SME_RANDOMIZE_IRQ
 
 #if SME_CLIENT && SME_ASYNC_CLIENT
-      uint64_t req_random = delete( &(c->rand_head_time), &(c->rand_tail_time));
+      uint64_t req_random = delete(&(c->rand_head_time), &(c->rand_tail_time));
 #elif SME_CLIENT
-      uint64_t req_random = c->rand_write_delay; 
+      uint64_t req_random = c->rand_write_delay;
 #endif
     //expected_latency_start = expected_latency_start - RANDOMIZATION_US + req_random;
     expected_latency_start = expected_latency_start + req_random;
 #if SME_DBG
-    printf("Req on fd %d, Req_random = %lu, expected_latency_start %lu, actual_start %lu \n", c->fd, req_random, expected_latency_start, c->start);
+    printf("Req on fd %d, Req_random = %lu, expected_latency_start %lu"
+        ", actual_start %lu \n"
+        , c->fd, req_random, expected_latency_start, c->start);
 #endif
     int64_t expected_latency_timing = now - expected_latency_start;
 #else
@@ -826,33 +844,33 @@ static int response_complete(http_parser *parser) {
         printf("  latest_write = %lu\n", c->latest_write);
 
 #if SME_CLIENT
-        //We would like to seed the calculation with the same seed that was used to randomise the request, i.e. we need to take one off
+        // We would like to seed the calculation with the same seed that was
+        // used to randomise the request, i.e. we need to take one off
         expected_latency_start = c->thread_start +
-            (c->all_requests_count / c->throughput); 
+            (c->all_requests_count / c->throughput);
 #else
         expected_latency_start = c->thread_start +
                 ((c->complete ) / c->throughput);
-#endif       
-    printf("  next expected_latency_start = %lu\n", expected_latency_start);
+#endif
+        printf("  next expected_latency_start = %lu\n", expected_latency_start);
     }
 
     c->latest_should_send_time = 0;
     c->latest_expected_start = 0;
 
     // Record if needed, either last in batch or all, depending in cfg:
-    if (cfg.record_all_responses || !c->has_pending){
-#if 0// SME_CLIENT
-      if(c->just_calibrated == 0){ 
-#if SME_DBG
-        printf("Recieved Response for request on c id: %d, fd: %d at time %lu, all_requests_received_count: %d, idx: %d \n", c->id, c->fd, now, c->all_requests_count -1, c->id + c->all_requests_count);
-#endif       
-#endif       
+    if (cfg.record_all_responses || !c->has_pending) {
 
         hdr_record_value(thread->latency_histogram, expected_latency_timing);
 #if SME_CLIENT && SME_ASYNC_CLIENT
-        uint64_t head_req_time = delete( &(c->head_time), &(c->tail_time));
+        uint64_t head_req_time = delete(&(c->head_time), &(c->tail_time));
 #if SME_DBG
-        printf("Recieved Response for request on c id: %d, fd: %d at time %lu, all_requests_received_count: %d, idx: %d, expected_latency %lu, req_time %lu,  actual_latency: %lu \n", c->id, c->fd, now, c->all_requests_count -1, c->id + c->all_requests_count, expected_latency_timing, head_req_time, now-head_req_time);
+        printf("Recieved Response for request on c id: %d, fd: %d at time %lu"
+            ", all_requests_received_count: %d, idx: %d, expected_latency %lu"
+            ", req_time %lu,  actual_latency: %lu \n"
+            , c->id, c->fd, now, c->all_requests_count -1
+            , c->id + c->all_requests_count, expected_latency_timing
+            , head_req_time, now-head_req_time);
 #endif
         uint64_t actual_latency_timing = now - head_req_time;//- delete(c->head_time, c->tail_time);
         //uint64_t actual_latency_timing = now - c->actual_latency_start;
@@ -862,18 +880,29 @@ static int response_complete(http_parser *parser) {
 #endif
 
 #if SME_DBG
-        
-        if(actual_latency_timing >  TIMEOUT_INTERVAL_MS*1000){
+        if (actual_latency_timing > TIMEOUT_INTERVAL_MS*1000) {
             //thread->errors.timeout++;
-            printf("Request is getting added to the hdr, although it timed out. Request is on fd %d Latency is %d\n", c->fd, actual_latency_timing);
+            printf("Request is getting added to the hdr, although it timed out."
+                " Request is on fd %d Latency is %d\n"
+                , c->fd, actual_latency_timing);
         }
 
-        if(actual_latency_timing >  expected_latency_timing){
-        //    //thread->errors.timeout++;
-           printf("BUG happens. Request is on fd %d Expected Latency is: %lu actual latency is: %lu, actual_start %lu , c->start %lu, now %lu, rand used %d , c->has_pending %d\n", c->fd, expected_latency_timing,  actual_latency_timing,c->actual_latency_start, c->start, now,  c->rand_write_delay, c->has_pending);
-        }else{
-           printf("BUG doesnt happen. Request is on fd %d Expected Latency is: %lu actual latency is: %lu, actual_start %lu , c->start %lu, now %lu, rand used %d , c->has_pending %d\n", c->fd, expected_latency_timing,  actual_latency_timing,c->actual_latency_start, c->start, now,  c->rand_write_delay, c->has_pending);
-         }
+        if (actual_latency_timing > expected_latency_timing) {
+           //thread->errors.timeout++;
+           printf("BUG happens. Request is on fd %d Expected Latency is: %lu"
+               " actual latency is: %lu, actual_start %lu , c->start %lu"
+               ", now %lu, rand used %d , c->has_pending %d\n"
+               , c->fd, expected_latency_timing, actual_latency_timing
+               , c->actual_latency_start, c->start, now, c->rand_write_delay
+               , c->has_pending);
+        } else {
+           printf("BUG doesnt happen. Request is on fd %d Expected Latency is: %lu"
+               " actual latency is: %lu, actual_start %lu , c->start %lu"
+               ", now %lu, rand used %d , c->has_pending %d\n"
+               , c->fd, expected_latency_timing, actual_latency_timing
+               , c->actual_latency_start, c->start, now, c->rand_write_delay
+               , c->has_pending);
+        }
 #endif
 
         hdr_record_value(thread->u_latency_histogram, actual_latency_timing);
@@ -893,22 +922,20 @@ static int response_complete(http_parser *parser) {
     }
 #endif
     }
+
 #if SME_CLIENT
-//    printf("Total number of reqs so far is: %lu, max allowed is %lu \n", c->all_requests_written_count, cfg.num_reqs);
     if (c->all_requests_written_count >= cfg.num_reqs){
         aeStop(thread->loop);
         goto done;
     }
-
 #endif
-#if ! (SME_CLIENT && SME_ASYNC_CLIENT)
+
+#if !(SME_CLIENT && SME_ASYNC_CLIENT)
     if (--c->pending == 0) {
         c->has_pending = false;
         aeCreateFileEvent(thread->loop, c->fd, AE_WRITABLE, socket_writeable, c);
     }
-#endif       
-
-
+#endif
 
     if (!http_should_keep_alive(parser)) {
         reconnect_socket(thread, c);
@@ -922,10 +949,7 @@ static int response_complete(http_parser *parser) {
 }
 
 static void socket_connected(aeEventLoop *loop, int fd, void *data, int mask) {
-    connection *c = data; 
-#if 0//SME_DBG
-    uint64_t now = time_us();
-#endif
+    connection *c = data;
 #if SME_CLIENT &&  SME_ASYNC_CLIENT
     if(c->connected) return;
 #endif
@@ -938,9 +962,9 @@ static void socket_connected(aeEventLoop *loop, int fd, void *data, int mask) {
 
     http_parser_init(&c->parser, HTTP_RESPONSE);
     c->written = 0;
-    #if SME_CLIENT
-      c->request_written = 0;
-    #endif
+#if SME_CLIENT
+    c->request_written = 0;
+#endif
 
 #if SME_CLIENT && SME_ASYNC_CLIENT
     aeCreateFileEvent(c->thread->loop, fd, AE_READABLE, socket_readable, c);
@@ -974,22 +998,20 @@ static void socket_writeable(aeEventLoop *loop, int fd, void *data, int mask) {
 
 
 #if SME_CLIENT
-//    printf("Total number of reqs so far is: %lu, max allowed is %lu \n", c->all_requests_written_count, cfg.num_reqs);
-    if (c->all_requests_written_count >= cfg.num_reqs){
+    if (c->all_requests_written_count >= cfg.num_reqs) {
         aeDeleteFileEvent(loop, fd, AE_WRITABLE);
 
 //        aeStop(thread->loop);
         return;
     }
-
 #endif
+
     if (!c->written) {
         uint64_t time_usec_to_wait = usec_to_next_send(c);
         if (time_usec_to_wait) {
-          //SME: consider removing the additional 0.5
-          //printf("Waiting for %lld ms before next write:", time_usec_to_wait );
+            // SME: consider removing the additional 0.5
             int msec_to_wait = round((time_usec_to_wait / 1000.0L) + 0.5);
-            
+
             // Not yet time to send. Delay:
             aeDeleteFileEvent(loop, fd, AE_WRITABLE);
             aeCreateTimeEvent(
@@ -1018,12 +1040,9 @@ static void socket_writeable(aeEventLoop *loop, int fd, void *data, int mask) {
             c->all_requests_count_at_last_batch_start = c->all_requests_count;
 #endif
         }
-#if SME_DBG
-        printf("Sending Request on fd: %d at %lu ms after thread start, actual start %lu c->start %lu, rand used  %d, c->has_pending %d\n", fd, (c->start - thread->start)/1000,  c->actual_latency_start, c->start,c->rand_write_delay, c->has_pending );
-#endif
-if (!c->written && !c->has_pending) {
+        if (!c->written && !c->has_pending) {
             c->has_pending = true;
-}
+        }
         c->pending = cfg.pipeline;
 
     }
@@ -1040,15 +1059,14 @@ if (!c->written && !c->has_pending) {
     }
     //potential bug if write over multiple writes
 #if SME_CLIENT && SME_ASYNC_CLIENT
-//    printf("INSERTING \n");
-//    printf("ARGS: Head %p tail %p item %lu\n", c->head_time, c->tail_time, c->start);
     insert(c->start, &(c->head_time), &(c->tail_time));
     //list( c->head_time, c->tail_time);
 #endif
 
 #if SME_DBG
     uint64_t preparing_for_write = time_us() - now;
-    printf("Written Request at: %lu, preparation and writing time took %lu \n", c->start, preparing_for_write);
+    printf("Written Request at: %lu, preparation and writing time took %lu\n"
+        , c->start, preparing_for_write);
 #endif
 #if SME_CLIENT
     c->all_requests_written_count++;
@@ -1057,9 +1075,9 @@ if (!c->written && !c->has_pending) {
     return;
 
   error:
-  #if SME_DBG
+#if SME_DBG
     printf("Error Writing Request on fd: %i at: %lu\n", fd, time_us());
-  #endif
+#endif
     thread->errors.write++;
     reconnect_socket(thread, c);
 }
@@ -1093,16 +1111,15 @@ static void socket_readable(aeEventLoop *loop, int fd, void *data, int mask) {
             case ERROR: goto error;
             case RETRY: return;
         }
-        
+
 
 #if SME_DBG
       printf("Reading %lu bytes from fd: %i after %lu us from request at %lu\n", n, fd, now - c->start, c->start );
-      
 #endif
         //now = time_us();
         if (http_parser_execute(&c->parser, &parser_settings, c->buf, n) != n) goto error;
         c->thread->bytes += n;
-    } while (n == RECVBUF && sock.readable(c) > 0 );//&& (now - c->start < (cfg.timeout*1000) )) 
+    } while (n == RECVBUF && sock.readable(c) > 0 );//&& (now - c->start < (cfg.timeout*1000) ))
 
 #if SME_DBG
      printf("post http_parser_execution for fd %d for req at %lu time is %lu took %lu\n",c->fd, c->start, now, time_us()-c->start);
@@ -1172,7 +1189,7 @@ static int parse_args(struct config *cfg, char **url, struct http_parser_url *pa
     cfg->connections = 10;
     cfg->duration    = 10;
     cfg->timeout     = SOCKET_TIMEOUT_MS;
-    //printf("Timeout Value: = %lld\n", SOCKET_TIMEOUT_MS); 
+    //printf("Timeout Value: = %lld\n", SOCKET_TIMEOUT_MS);
     cfg->rate        = 0;
     cfg->record_all_responses = true;
     cfg->num_reqs = 9223372036854776;
@@ -1209,7 +1226,7 @@ static int parse_args(struct config *cfg, char **url, struct http_parser_url *pa
             case 'T':
                 if (scan_time(optarg, &cfg->timeout)) return -1;
                 cfg->timeout *= 1 ;
-                printf("Timeout Value updated: = %lu\n", cfg->timeout); 
+                printf("Timeout Value updated: = %lu\n", cfg->timeout);
                 break;
             case 'R':
                 if (scan_metric(optarg, &cfg->rate)) return -1;

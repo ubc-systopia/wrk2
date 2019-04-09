@@ -8,7 +8,8 @@ node_t* insert(uint64_t item, node_t** head, node_t** tail)
     ptr->item = item;
     ptr->next = NULL;
 #if SME_DBG
-    printf("INSERT: Head %p tail %p item_ptr %p NULL is %p\n", ((node_t*) *head),((node_t*) *tail), ptr, NULL);
+    printf("INSERT: Head %p tail %p item_ptr %p NULL is %p\n"
+        , ((node_t*) *head), ((node_t*) *tail), ptr, NULL);
 #endif
     if (NULL == *head) {
 #if SME_DBG
@@ -20,7 +21,9 @@ node_t* insert(uint64_t item, node_t** head, node_t** tail)
         *tail = ptr;
     }
 #if SME_DBG
-    printf("INSERT: Head %p head_next %p tail %p tail_next %pitem %lu item_ptr %p\n",((node_t*) *head),((node_t*) *head)->next , ((node_t*) *tail),((node_t*) *tail)->next,  ((node_t*) *tail)->item, ptr);
+    printf("INSERT: Head %p head_next %p tail %p tail_next %pitem %lu item_ptr %p\n"
+        , ((node_t*) *head), ((node_t*) *head)->next, ((node_t*) *tail)
+        , ((node_t*) *tail)->next, ((node_t*) *tail)->item, ptr);
 #endif
     return ptr;
 }
@@ -35,7 +38,7 @@ uint64_t delete(node_t** head, node_t** tail)
         uint64_t item = ptr->item;
         *head = ptr->next;
         if (NULL == *head) {
-          *tail = *head; 
+          *tail = *head;
 #if SME_DBG
           printf("Tail == Head == NULL\n");
 #endif
@@ -43,7 +46,8 @@ uint64_t delete(node_t** head, node_t** tail)
         free(ptr);
         ptr = NULL;
 #if SME_DBG
-        printf("DELETE: Head %p tail %p item %lu \n",((node_t*) *head), *tail, item);
+        printf("DELETE: Head %p tail %p item %lu\n"
+            , ((node_t*) *head), *tail, item);
 #endif
         return item;
     }
