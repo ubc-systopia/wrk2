@@ -84,11 +84,13 @@ char *format_metric(long double n) {
 
 char *format_time_us(long double n) {
     units *units = &time_units_us;
+#if 0
     if (n >= 1000000.0) {
         n /= 1000000.0;
         units = &time_units_s;
     }
-    return format_units(n, units, 2);
+#endif
+    return format_units(n, units, 3);
 }
 
 char *format_time_s(long double n) {
