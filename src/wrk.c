@@ -129,8 +129,11 @@ int main(int argc, char **argv) {
     uint64_t stop_at     = time_us() + (cfg.duration * 1000000);
 
 #if SME_CLIENT
-    printf("=== SME Paced Client ===\nPer thread Xput: %lf, Rate: %lf, Thread count %"PRIu64" \n", throughput, (double)cfg.rate, cfg.threads);
-    printf("Asyncronous client? %s \n Randomised Start Of Threads +[0, %d]? %s \n Randomised Inter Request spacing +[0, %d]? %s \n ----------------------- \n", 
+    printf("=== SME Paced Client ===\n"
+        "Per thread Xput: %lf, Rate: %lf, #Connections: %ld, Thread count %lu\n"
+        , throughput, (double)cfg.rate, cfg.connections, cfg.threads);
+    printf("Asyncronous client? %s \n Randomised Start Of Threads +[0, %d]? %s\n"
+        "Randomised Inter Request spacing +[0, %d]? %s\n-----------------------\n",
         SME_ASYNC_CLIENT? "TRUE" :"FALSE", 
         RANDOMIZATION_US,
         SME_STAGGER_WORKERS?  "TRUE" : "FALSE",
@@ -217,11 +220,14 @@ int main(int argc, char **argv) {
         complete += t->complete;
         bytes    += t->bytes;
 #if SME_CLIENT
-        for(uint64_t j = 0; j < t-> connections; j++){
-          post_warmup_total_reqs_count += t->cs[j].all_requests_count - t->cs[j].all_requests_count_at_calibration;
+        for(uint64_t j = 0; j < t-> connections; j++) {
+          post_warmup_total_reqs_count += (t->cs[j].all_requests_count
+              - t->cs[j].all_requests_count_at_calibration);
           total_reqs_count += t->cs[j].all_requests_count;
 
-          post_warmup_total_reqs_written_count += t->cs[j].all_requests_written_count - t->cs[j].all_requests_written_count_at_calibration;
+          post_warmup_total_reqs_written_count +=
+            (t->cs[j].all_requests_written_count
+             - t->cs[j].all_requests_written_count_at_calibration);
           total_reqs_written_count += t->cs[j].all_requests_written_count;
 #if SME_ASYNC_CLIENT
           //printf("Freeing_up_queues\n");
@@ -251,17 +257,20 @@ int main(int argc, char **argv) {
 
     long double runtime_s   = runtime_us / 1000000.0;
 #if SME_CLIENT
-    runtime_s = runtime_s < cfg.duration? runtime_s : cfg.duration;
-//    long double warm_runtime_s = runtime_us / 1000000.0 - CALIBRATE_DELAY_MS/1000;
-//    I am not using the actual time it took to reach here because it adds more time than
-//    the actual time requests were allowed to happen. A minimum runtime of 1 sec is used as a default
-    long double warm_runtime_s = (runtime_s - CALIBRATE_DELAY_MS/1000.0) <= 1 ? 1 : (runtime_s - CALIBRATE_DELAY_MS/1000.0);
-    long double post_warmup_all_req_per_s   = post_warmup_total_reqs_count   / warm_runtime_s;
-    long double post_warmup_all_complete_req_per_s   = (post_warmup_total_reqs_count - post_warmup_errors.timeout)  / warm_runtime_s;
-    long double all_req_per_s   = total_reqs_count   / runtime_s;
+    runtime_s = runtime_s < cfg.duration ? runtime_s : cfg.duration;
+    // I am not using the actual time it took to reach here because it adds
+    // more time than the actual time requests were allowed to happen.
+    // A minimum runtime of 1 sec is used as a default
+    long double warm_runtime_s = (runtime_s - CALIBRATE_DELAY_MS/1000.0) <= 1 ? 1
+      : (runtime_s - CALIBRATE_DELAY_MS/1000.0);
+    long double post_warmup_all_req_per_s =
+      post_warmup_total_reqs_count / warm_runtime_s;
+    long double post_warmup_all_complete_req_per_s =
+      (post_warmup_total_reqs_count - post_warmup_errors.timeout) / warm_runtime_s;
+    long double all_req_per_s = total_reqs_count / runtime_s;
 #endif
-    long double req_per_s   = complete   / runtime_s;
-    long double bytes_per_s = bytes      / runtime_s;
+    long double req_per_s = complete / runtime_s;
+    long double bytes_per_s = bytes / runtime_s;
 
     stats *latency_stats = stats_alloc(10);
     latency_stats->min = hdr_min(latency_histogram);
@@ -402,8 +411,11 @@ void *thread_main(void *arg) {
 
 
 #if SME_CLIENT
-    uint64_t calibrate_delay = CALIBRATE_DELAY_MS - (time_us() - thread->start_at)/1000; //- rand()% 100; //+ (thread->connections * 25);
-    uint64_t timeout_delay = cfg.timeout; // TIMEOUT_INTERVAL_MS; // + (thread->connections * 5);
+    uint64_t calibrate_delay = CALIBRATE_DELAY_MS
+      - (time_us() - thread->start_at)/1000;
+    //- rand()% 100; //+ (thread->connections * 25);
+    uint64_t timeout_delay = cfg.timeout;
+    // TIMEOUT_INTERVAL_MS; // + (thread->connections * 5);
 #else
     uint64_t calibrate_delay = CALIBRATE_DELAY_MS + (thread->connections * 5);
     uint64_t timeout_delay = TIMEOUT_INTERVAL_MS + (thread->connections * 5);
@@ -521,10 +533,12 @@ static int calibrate(aeEventLoop *loop, long long id, void *data) {
 
     thread->start    = time_us();
 #if SME_CLIENT
-    for(uint64_t j = 0; j < thread->connections; j++){
+    for(uint64_t j = 0; j < thread->connections; j++) {
 //       thread->cs[j].thread_start = thread->start;
-       thread->cs[j].all_requests_count_at_calibration = thread->cs[j].all_requests_count;
-       thread->cs[j].all_requests_written_count_at_calibration = thread->cs[j].all_requests_written_count;
+       thread->cs[j].all_requests_count_at_calibration =
+         thread->cs[j].all_requests_count;
+       thread->cs[j].all_requests_written_count_at_calibration =
+         thread->cs[j].all_requests_written_count;
 //       thread->cs[j].just_calibrated = 1;
 //       thread->cs[j].all_requests_count_at_last_batch_start = 0;
     }
@@ -566,13 +580,15 @@ static int check_timeouts(aeEventLoop *loop, long long id, void *data) {
 #endif
 
 #if SME_CLIENT && !SME_ASYNC_CLIENT
-        if (maxAge > c->start && c->request_written == 1 && thread->stop_at > now ) {
+        if (maxAge > c->start && c->request_written == 1 && thread->stop_at > now)
 #elif SME_CLIENT && SME_ASYNC_CLIENT
-// If the client is ASYNC, we should compare to the earlilest request written
-        if (maxAge > peak(c->head_time) && c->request_written == 1 && thread->stop_at > now) {
+        // If the client is ASYNC, compare to the earliest request written
+        if (maxAge > peak(c->head_time) && c->request_written == 1
+            && thread->stop_at > now)
 #else
-        if (maxAge > c->start) {
+        if (maxAge > c->start)
 #endif
+        {
             thread->errors.timeout++;
 #if SME_DBG
             printf("A request timed out on fd %d after %lu"
@@ -792,10 +808,6 @@ static int response_complete(http_parser *parser) {
     // start time based on the completion count of these individual pipelined
     // requests we can easily end up "gifting" them time and seeing
     // negative latencies.
-//#if SME_CLIENT && SME_ASYNC_CLIENT
-//    srand(c->id + c->all_requests_count - 1);
-//    uint64_t expected_latency_start = c->thread_start +
-//            ((c->all_requests_count - 1) / c->throughput);
 #if SME_CLIENT
     uint64_t expected_latency_start = c->thread_start +
             ((c->all_requests_count -1 )/ c->throughput);
@@ -906,21 +918,6 @@ static int response_complete(http_parser *parser) {
 #endif
 
         hdr_record_value(thread->u_latency_histogram, actual_latency_timing);
-#if 0//SME_CLIENT
-      }
-#endif
-
-#if 0// SME_CLIENT
-    if (c->just_calibrated){
-       c->thread->start = time_us();
-       c->thread_start = c->thread->start;
-       c->all_requests_count = 1;
-       c->all_requests_written_count = 1;
-       c->rand_as_of_all_requests_written_count = 1;
-       c->all_requests_count_at_last_batch_start = 0;     
-       c->just_calibrated = 0;
-    }
-#endif
     }
 
 #if SME_CLIENT
