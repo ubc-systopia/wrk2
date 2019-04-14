@@ -126,7 +126,8 @@ int main(int argc, char **argv) {
 
     uint64_t connections = cfg.connections / cfg.threads;
     double throughput    = (double)cfg.rate / cfg.threads;
-    uint64_t stop_at     = time_us() + (cfg.duration * 1000000);
+    uint64_t start    = time_us();
+    uint64_t stop_at     = start + (cfg.duration * 1000000);
 
 #if SME_CLIENT
     printf("=== SME Paced Client ===\n"
@@ -140,7 +141,6 @@ int main(int argc, char **argv) {
         REQUEST_RANDOMIZATION_US,
         SME_RANDOMIZE_IRQ? "TRUE" : "FALSE"
         );
-    uint64_t start    = time_us();
 #endif
 
 
@@ -188,10 +188,6 @@ int main(int argc, char **argv) {
     printf("Running %s test @ %s\n", time, url);
     printf("  %"PRIu64" threads and %"PRIu64" connections\n",
             cfg.threads, cfg.connections);
-#if !SME_CLIENT
-   uint64_t start    = time_us();
-   // start    = time_us();
-#endif
     uint64_t complete = 0;
 #if SME_CLIENT
     uint64_t post_warmup_total_reqs_count = 0;
@@ -1083,18 +1079,7 @@ static void socket_writeable(aeEventLoop *loop, int fd, void *data, int mask) {
 static void socket_readable(aeEventLoop *loop, int fd, void *data, int mask) {
     connection *c = data;
     size_t n;
-#if SME_DBG
-    uint64_t now;
-#endif
-#if SME_DBG
-    now = time_us();
-    printf("XReading socket after: %lu \n", now - c->start);
-#endif
     do {
-#if SME_DBG
-      now = time_us();
-      printf("pre http_parser_execution for fd %d for req sent at %lu  time is %lu took %lu \n",c->fd, c->start, now, time_us()-c->start);
-#endif
      // if (now - c->start > cfg.timeout*1000) {
      //     c->all_requests_count++;
      //     c->thread->errors.timeout++;
@@ -1110,17 +1095,10 @@ static void socket_readable(aeEventLoop *loop, int fd, void *data, int mask) {
         }
 
 
-#if SME_DBG
-      printf("Reading %lu bytes from fd: %i after %lu us from request at %lu\n", n, fd, now - c->start, c->start );
-#endif
-        //now = time_us();
         if (http_parser_execute(&c->parser, &parser_settings, c->buf, n) != n) goto error;
         c->thread->bytes += n;
-    } while (n == RECVBUF && sock.readable(c) > 0 );//&& (now - c->start < (cfg.timeout*1000) ))
+    } while (n == RECVBUF && sock.readable(c) > 0 ); //&& (now - c->start < (cfg.timeout*1000) ))
 
-#if SME_DBG
-     printf("post http_parser_execution for fd %d for req at %lu time is %lu took %lu\n",c->fd, c->start, now, time_us()-c->start);
-#endif
 #if SME_CLIENT && !SME_ASYNC_CLIENT
     // TIMEOUT_INTERVAL_MS;
     c->request_written = 0;
