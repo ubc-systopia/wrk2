@@ -1058,7 +1058,10 @@ static void socket_writeable(aeEventLoop *loop, int fd, void *data, int mask) {
 static void socket_readable(aeEventLoop *loop, int fd, void *data, int mask) {
     connection *c = data;
     size_t n;
+    int errtype = 0;
+
     do {
+
      // if (now - c->start > cfg.timeout*1000) {
      //     c->all_requests_count++;
      //     c->thread->errors.timeout++;
@@ -1069,12 +1072,15 @@ static void socket_readable(aeEventLoop *loop, int fd, void *data, int mask) {
      //  }
         switch (sock.read(c, &n)) {
             case OK:    break;
-            case ERROR: goto error;
+            case ERROR: errtype = 1; goto error;
             case RETRY: return;
         }
 
+        if (http_parser_execute(&c->parser, &parser_settings, c->buf, n) != n) {
+          errtype = 2;
+          goto error;
+        }
 
-        if (http_parser_execute(&c->parser, &parser_settings, c->buf, n) != n) goto error;
         c->thread->bytes += n;
     } while (n == RECVBUF && sock.readable(c) > 0 ); //&& (now - c->start < (cfg.timeout*1000) ))
 
@@ -1085,12 +1091,13 @@ static void socket_readable(aeEventLoop *loop, int fd, void *data, int mask) {
    if (peak(c->head_time) == -1){
       c->request_written = 0;
    }
-
 #endif
 
     return;
 
 error:
+    wprint(LVL_EXP, "read err %d #bytes %lu fd %i after %lu us from request at %lu"
+        , errtype, n, fd, time_us() - c->start, c->start);
     c->thread->errors.read++;
     reconnect_socket(c->thread, c);
 
