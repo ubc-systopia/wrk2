@@ -41,7 +41,7 @@ $(BIN): $(OBJ)
 	@echo LINK $(BIN)
 	@$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
-$(OBJ): config.h Makefile $(LDIR)/libluajit.a | $(ODIR)
+$(OBJ): config.h sme_debug.h Makefile $(LDIR)/libluajit.a | $(ODIR)
 
 $(ODIR):
 	@mkdir -p $@

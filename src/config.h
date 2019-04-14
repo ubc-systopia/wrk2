@@ -11,7 +11,13 @@
 #endif
 
 
-#define SME_DBG 0 
+#define LVL_DBG 0
+#define LVL_INFO 1
+#define LVL_ERR 2
+#define LVL_EXP 3
+
+#define SME_DEBUG_LVL LVL_EXP
+
 //SME_CLIENT has to be set for all subsequent configurations
 #define SME_CLIENT 1
 
