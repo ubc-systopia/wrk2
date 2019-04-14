@@ -134,10 +134,10 @@ int main(int argc, char **argv) {
         , throughput, (double)cfg.rate, cfg.connections, cfg.threads);
     printf("Asyncronous client? %s \n Randomised Start Of Threads +[0, %d]? %s\n"
         "Randomised Inter Request spacing +[0, %d]? %s\n-----------------------\n",
-        SME_ASYNC_CLIENT? "TRUE" :"FALSE", 
-        RANDOMIZATION_US,
+        SME_ASYNC_CLIENT? "TRUE" :"FALSE",
+        WORKER_RANDOMIZATION_US,
         SME_STAGGER_WORKERS?  "TRUE" : "FALSE",
-        RANDOMIZATION_US,
+        REQUEST_RANDOMIZATION_US,
         SME_RANDOMIZE_IRQ? "TRUE" : "FALSE"
         );
     uint64_t start    = time_us();
@@ -174,8 +174,8 @@ int main(int argc, char **argv) {
             exit(2);
         }
 #if SME_CLIENT && SME_STAGGER_WORKERS
-       usleep(rand() % RANDOMIZATION_US);
-#endif   
+        usleep(rand() % WORKER_RANDOMIZATION_US);
+#endif
     }
     struct sigaction sa = {
         .sa_handler = handler,
@@ -756,8 +756,8 @@ static int delay_request(aeEventLoop *loop, long long id, void *data) {
     aeCreateFileEvent(c->thread->loop, c->fd, AE_WRITABLE, socket_writeable, c);
 #if SME_CLIENT && SME_ASYNC_CLIENT
 #if SME_RANDOMIZE_IRQ
-    double delay_for_next = 500/(c->throughput*1000000);// - RANDOMIZATION_US;
-#else 
+    double delay_for_next = 500/(c->throughput*1000000);// - REQUEST_RANDOMIZATION_US;
+#else
     double delay_for_next = 1000/(c->throughput*1000000);
 #endif
     return (delay_for_next < 1)? 1: (int)delay_for_next; //
@@ -823,7 +823,7 @@ static int response_complete(http_parser *parser) {
 #elif SME_CLIENT
       uint64_t req_random = c->rand_write_delay;
 #endif
-    //expected_latency_start = expected_latency_start - RANDOMIZATION_US + req_random;
+    //expected_latency_start = expected_latency_start - REQUEST_RANDOMIZATION_US + req_random;
     expected_latency_start = expected_latency_start + req_random;
 #if SME_DBG
     printf("Req on fd %d, Req_random = %lu, expected_latency_start %lu"

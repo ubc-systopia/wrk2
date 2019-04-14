@@ -18,6 +18,7 @@
 //Randomized thread start times 
 //(provides a slower warmup phase and adds randomness).
 #define SME_STAGGER_WORKERS 1
+#define WORKER_RANDOMIZATION_US 10000
 
 //Randomized Inter request delay
 #define SME_RANDOMIZE_IRQ 1
@@ -30,6 +31,6 @@
 // NEW: If set to x then all randomizations will be + x for SME_RANDOMIZE_IRQ 
 // Staggering of clients using SME_STAGGER_WORKERS will be 
 // randomly picked from 0 - RANDOMIZATION_US
-#define RANDOMIZATION_US 12500
+#define REQUEST_RANDOMIZATION_US 10000
 
 #endif /* CONFIG_H */
