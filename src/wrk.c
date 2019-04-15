@@ -421,7 +421,7 @@ void *thread_main(void *arg) {
     aeCreateTimeEvent(loop, calibrate_delay, calibrate, thread, NULL);
 
 #if SME_CLIENT
-    aeCreateTimeEvent(loop, timeout_delay/4, check_timeouts, thread, NULL);
+    aeCreateTimeEvent(loop, timeout_delay/TIMEOUT_LOOP_FREQ, check_timeouts, thread, NULL);
 #else
     aeCreateTimeEvent(loop, timeout_delay, check_timeouts, thread, NULL);
 #endif
@@ -608,7 +608,7 @@ static int check_timeouts(aeEventLoop *loop, long long id, void *data) {
     }
 
 #if SME_CLIENT
-    return cfg.timeout/4;// TIMEOUT_INTERVAL_MS;
+    return cfg.timeout/TIMEOUT_LOOP_FREQ;// TIMEOUT_INTERVAL_MS;
 #else
     return cfg.timeout;// TIMEOUT_INTERVAL_MS;
 #endif

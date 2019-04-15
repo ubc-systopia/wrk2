@@ -39,4 +39,5 @@
 // randomly picked from 0 - RANDOMIZATION_US
 #define REQUEST_RANDOMIZATION_US 10000
 
+#define TIMEOUT_LOOP_FREQ   4
 #endif /* CONFIG_H */
