@@ -145,7 +145,6 @@ int main(int argc, char **argv) {
         );
 #endif
 
-
     for (uint64_t i = 0; i < cfg.threads; i++) {
         thread *t = &threads[i];
         t->loop        = aeCreateEventLoop(10 + cfg.connections * 3);
@@ -557,6 +556,7 @@ static int check_timeouts(aeEventLoop *loop, long long id, void *data) {
     connection *c  = thread->cs;
     uint64_t now   = time_us();
     uint64_t maxAge = now - (cfg.timeout * 1000);
+    uint64_t first_pending_time = 0;
     wprint(LVL_DBG, "Checking timeout at: %lu", now);
 
     for (uint64_t i = 0; i < thread->connections; i++, c++) {
@@ -571,9 +571,10 @@ static int check_timeouts(aeEventLoop *loop, long long id, void *data) {
 #if SME_CLIENT && !SME_ASYNC_CLIENT
         if (maxAge > c->start && c->request_written == 1 && thread->stop_at > now)
 #elif SME_CLIENT && SME_ASYNC_CLIENT
-        // If the client is ASYNC, compare to the earliest request written
-        if (maxAge > peak(c->head_time) && c->request_written == 1
-            && thread->stop_at > now)
+      // If the client is ASYNC, compare to the earliest request written
+      if (((first_pending_time = peak(c->head_time)) != 0)
+          && maxAge > first_pending_time && c->request_written == 1
+          && thread->stop_at > now)
 #else
         if (maxAge > c->start)
 #endif
@@ -1088,9 +1089,9 @@ static void socket_readable(aeEventLoop *loop, int fd, void *data, int mask) {
     // TIMEOUT_INTERVAL_MS;
     c->request_written = 0;
 #elif SME_CLIENT && SME_ASYNC_CLIENT
-   if (peak(c->head_time) == -1){
+    if (peak(c->head_time) == 0) {
       c->request_written = 0;
-   }
+    }
 #endif
 
     return;

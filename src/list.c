@@ -48,7 +48,7 @@ uint64_t delete(node_t** head, node_t** tail)
 //Usually used to peak on the last inserted value (tail)
 uint64_t peak(node_t *node){
     if (NULL == node) {
-        return -1;
+        return 0;
     } else {
         return node->item;
     }
