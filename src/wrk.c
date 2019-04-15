@@ -561,46 +561,50 @@ static int check_timeouts(aeEventLoop *loop, long long id, void *data) {
 
     for (uint64_t i = 0; i < thread->connections; i++, c++) {
 
-    wprint(LVL_DBG, "\tChecking request time out at time  %lu, %lu after last check"
-        ", requests_written? %d, maxAge %lu, c->start %lu, c->latest_write %lu"
-        ", req_timed_out? %d, should stop? %d, fd %d",
-        now, now - c->last_timeout_check,  c->request_written, maxAge, c->start
-        , c->latest_write,  maxAge > c->start, thread->stop_at < now , c->fd);
-    c->last_timeout_check = now;
+      wprint(LVL_DBG, "\tChecking request time out at time  %lu, %lu after last check"
+          ", requests_written? %d, maxAge %lu, c->start %lu, c->latest_write %lu"
+          ", req_timed_out? %d, should stop? %d, fd %d",
+          now, now - c->last_timeout_check, c->request_written, maxAge, c->start
+          , c->latest_write,  maxAge > c->start, thread->stop_at < now , c->fd);
 
 #if SME_CLIENT && !SME_ASYNC_CLIENT
-        if (maxAge > c->start && c->request_written == 1 && thread->stop_at > now)
+      if (maxAge > c->start && c->request_written == 1 && thread->stop_at > now)
 #elif SME_CLIENT && SME_ASYNC_CLIENT
       // If the client is ASYNC, compare to the earliest request written
       if (((first_pending_time = peak(c->head_time)) != 0)
           && maxAge > first_pending_time && c->request_written == 1
           && thread->stop_at > now)
 #else
-        if (maxAge > c->start)
+      if (maxAge > c->start)
 #endif
-        {
-            thread->errors.timeout++;
-            wprint(LVL_DBG, "A request timed out on fd %d after %lu"
-                ", original write at: %lu\n"
-                , c->fd, now - c->latest_write, c->start);
-            wprint(LVL_DBG, "\tChecking request time out at time  %lu, %lu"
-                " after last check, requests_written? %d, maxAge %lu"
-                ", c->start %lu, c->latest_write %lu, req_timed_out? %d"
-                ", should stop? %d thread->start %lu\n"
-                , now, now - c->last_timeout_check, c->request_written
-                , maxAge, c->start, c->latest_write, maxAge > c->start
-                , thread->stop_at < now, now - thread->start);
+      {
+        thread->errors.timeout++;
+        wprint(LVL_DBG, "A request timed out on fd %d after %lu"
+            ", original write at: %lu\n"
+            , c->fd, now - c->latest_write, c->start);
 
-            c->all_requests_count++;
+        c->all_requests_count++;
 #if SME_CLIENT && !SME_ASYNC_CLIENT
-            //stop = 1;
-            //if (c->all_requests_count % 101 == 0){
-            reconnect_socket(thread, c);
-            //}
-            //aeDeleteFileEvent(thread->loop, c->fd, AE_READABLE);
-            //aeDeleteFileEvent(thread->loop, c->fd, AE_WRITABLE);
+        //if (c->all_requests_count % 101 == 0){
+        reconnect_socket(thread, c);
+        //}
 #endif
-        }
+        wprint(LVL_EXP, "[%lu] fd %d last check delta %lu "
+            "requests_written %d pending %d bytes %lu maxAge %lu "
+            "peek %lu last write %lu timeout %d "
+            "stop %d reqs %lu rsp %lu"
+            , now - thread->start, c->fd, now - c->last_timeout_check
+            , c->request_written, c->has_pending, thread->bytes
+            , maxAge - thread->start, first_pending_time - thread->start
+            , c->latest_write - thread->start
+            , maxAge > first_pending_time
+            , thread->stop_at < now
+            , (c->all_requests_written_count -
+              c->all_requests_written_count_at_calibration)
+            , (c->all_requests_count - c->all_requests_count_at_calibration)
+            );
+      }
+      c->last_timeout_check = now;
     }
 
     if (stop || now >= thread->stop_at) {
@@ -704,22 +708,18 @@ static uint64_t usec_to_next_send(connection *c) {
 
     bool send_now = true;
     if (next_start_time > now) {
-        // We are on pace. Indicate caught_up and don't send now.
-        c->caught_up = true;
-        send_now = false;
-#if SME_CLIENT
+      // We are on pace. Indicate caught_up and don't send now.
+      c->caught_up = true;
+      send_now = false;
       wprint(LVL_DBG, "We are Good! by %ld, time now: %ld, thread started at: %ld"
           ", total requests count: %ld, xput %lf , next start time: %ld"
           , next_start_time - now, now, c->thread_start, c->all_requests_count
           , c->throughput, next_start_time);
-#endif
     } else {
-#if SME_CLIENT
       wprint(LVL_DBG, "We are behind by %ld, time now : %ld, thread started at: %ld"
           ", total requests count: %ld, xput %lf , next start time: %ld"
           , now-next_start_time, now, c->thread_start, c->all_requests_count
           , c->throughput, next_start_time);
-#endif
     }
 
     if (send_now) {
@@ -899,7 +899,7 @@ static int response_complete(http_parser *parser) {
     }
 
 #if SME_CLIENT
-    if (c->all_requests_written_count >= cfg.num_reqs){
+    if (c->all_requests_written_count >= cfg.num_reqs) {
         aeStop(thread->loop);
         goto done;
     }

@@ -16,12 +16,10 @@
 
 #include "config.h"
 
-#define PFX "SME"
-
 #define itrace  \
   do {  \
     if (SME_DEBUG_LVL <= LVL_EXP) { \
-      printf(PFX " (%d) %s:%d\n"  \
+      printf("(%d) %s:%d\n"  \
           , getpid() \
           , __func__, __LINE__);  \
     } \
@@ -30,7 +28,7 @@
 #define wprint(LVL, F, A...)  \
   do {  \
     if (SME_DEBUG_LVL <= LVL) { \
-      printf(PFX " (%d) %s:%d " F "\n"  \
+      printf("(%d) %s:%d " F "\n"  \
           , getpid() \
           , __func__, __LINE__, A); \
     } \
@@ -39,7 +37,7 @@
 #define wprint2(LVL, F, A...) \
   do {  \
     if (SME_DEBUG_LVL <= LVL) { \
-      printf(PFX " (%d) " F "\n"  \
+      printf("(%d) " F "\n"  \
           , getpid(), A);  \
     } \
   } while (0)
