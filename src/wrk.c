@@ -410,9 +410,7 @@ void *thread_main(void *arg) {
 #if SME_CLIENT
     uint64_t calibrate_delay = CALIBRATE_DELAY_MS
       - (time_us() - thread->start_at)/1000;
-    //- rand()% 100; //+ (thread->connections * 25);
     uint64_t timeout_delay = cfg.timeout;
-    // TIMEOUT_INTERVAL_MS; // + (thread->connections * 5);
 #else
     uint64_t calibrate_delay = CALIBRATE_DELAY_MS + (thread->connections * 5);
     uint64_t timeout_delay = TIMEOUT_INTERVAL_MS + (thread->connections * 5);
@@ -556,20 +554,14 @@ static int check_timeouts(aeEventLoop *loop, long long id, void *data) {
     connection *c  = thread->cs;
     uint64_t now   = time_us();
     uint64_t maxAge = now - (cfg.timeout * 1000);
-    uint64_t first_pending_time = 0;
     wprint(LVL_DBG, "Checking timeout at: %lu", now);
 
     for (uint64_t i = 0; i < thread->connections; i++, c++) {
 
-      wprint(LVL_DBG, "\tChecking request time out at time  %lu, %lu after last check"
-          ", requests_written? %d, maxAge %lu, c->start %lu, c->latest_write %lu"
-          ", req_timed_out? %d, should stop? %d, fd %d",
-          now, now - c->last_timeout_check, c->request_written, maxAge, c->start
-          , c->latest_write,  maxAge > c->start, thread->stop_at < now , c->fd);
-
 #if SME_CLIENT && !SME_ASYNC_CLIENT
       if (maxAge > c->start && c->request_written == 1 && thread->stop_at > now)
 #elif SME_CLIENT && SME_ASYNC_CLIENT
+      uint64_t first_pending_time = 0;
       // If the client is ASYNC, compare to the earliest request written
       if (((first_pending_time = peak(c->head_time)) != 0)
           && maxAge > first_pending_time && c->request_written == 1
@@ -583,26 +575,26 @@ static int check_timeouts(aeEventLoop *loop, long long id, void *data) {
             ", original write at: %lu\n"
             , c->fd, now - c->latest_write, c->start);
 
-        c->all_requests_count++;
 #if SME_CLIENT && !SME_ASYNC_CLIENT
         //if (c->all_requests_count % 101 == 0){
         reconnect_socket(thread, c);
         //}
 #endif
-        wprint(LVL_EXP, "[%lu] fd %d last check delta %lu "
+        wprint(LVL_DBG, "[%lu] fd %d last check delta %lu "
             "requests_written %d pending %d bytes %lu maxAge %lu "
-            "peek %lu last write %lu timeout %d "
+            "last write %lu delay %lu "
             "stop %d reqs %lu rsp %lu"
             , now - thread->start, c->fd, now - c->last_timeout_check
             , c->request_written, c->has_pending, thread->bytes
-            , maxAge - thread->start, first_pending_time - thread->start
+            , maxAge - thread->start
             , c->latest_write - thread->start
-            , maxAge > first_pending_time
+            , now - c->latest_write
             , thread->stop_at < now
             , (c->all_requests_written_count -
               c->all_requests_written_count_at_calibration)
             , (c->all_requests_count - c->all_requests_count_at_calibration)
             );
+        c->all_requests_count++;
       }
       c->last_timeout_check = now;
     }
