@@ -1112,17 +1112,6 @@ static void socket_writeable(aeEventLoop *loop, int fd, void *data, int mask) {
     insert(c->start, &(c->head_time), &(c->tail_time));
 #endif
 
-    wprint(LVL_DBG, "[%lu] fd %d prev delta %lu actual start %lu c->start %lu "
-        "req written %ld req completed %ld req len %lu %ld stop %d"
-        , (c->start - thread->start), fd, (c->start - previous_c_start)
-        , c->actual_latency_start, c->start
-        , (c->all_requests_written_count -
-          c->all_requests_written_count_at_calibration)
-        , (c->all_requests_count - c->all_requests_count_at_calibration)
-        , len, n
-        , (c->thread->stop_at <= time_us())
-        );
-
 #if SME_CLIENT
     c->all_requests_written_count++;
     c->request_written = 1;
