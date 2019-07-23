@@ -31,6 +31,9 @@
 
 #include <sys/epoll.h>
 
+#include "pacer_time.h"
+#include "generic_q.h"
+
 typedef struct aeApiState {
     int epfd;
     struct epoll_event *events;
@@ -120,7 +123,60 @@ static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp) {
             if (e->events & EPOLLHUP) mask |= AE_WRITABLE;
             eventLoop->fired[j].fd = e->data.fd;
             eventLoop->fired[j].mask = mask;
+
+#if CONFIG_PROFLOG
+            {
+              connection *c = (connection *)
+                (eventLoop->events[eventLoop->fired[j].fd]).clientData;
+              int qidx = c->thread->sock_port % MAX_STATQ_ARRAYS;
+              rx_ssl_elem_t e = {
+                .ts       = get_current_time(SCALE_NS),
+                .sys_tid  = c->thread->sys_tid,
+                .reqs     = (c->all_requests_written_count -
+                              c->all_requests_written_count_at_calibration),
+                .len      = 0,
+                .fd       = eventLoop->fired[j].fd,
+                .caller   = 5,
+                .epfd     = state->epfd,
+                .epret    = retval,
+                .epmask   = (state->events+j)->events,
+                .thread_stop = c->thread->loop->stop,
+                .time_stop = c->thread->stop_at <= get_current_time(SCALE_US),
+              };
+              if (generic_q_empty(rx_ssl_q[qidx])) {
+                rx_ssl_q[qidx]->port = c->thread->sock_port;
+                rx_ssl_q[qidx]->fd = c->fd;
+                rx_ssl_q[qidx]->sys_tid = c->thread->sys_tid;
+              }
+              put_generic_q(rx_ssl_q[qidx], (void *) &e);
+            }
+#endif
         }
+    } else {
+#if CONFIG_PROFLOG
+      connection *c = (connection *) eventLoop->connData;
+      int qidx = c->thread->sock_port % MAX_STATQ_ARRAYS;
+      rx_ssl_elem_t e = {
+        .ts       = get_current_time(SCALE_NS),
+        .sys_tid  = c->thread->sys_tid,
+        .reqs     = (c->all_requests_written_count -
+                      c->all_requests_written_count_at_calibration),
+        .len      = 0,
+        .fd       = 0,
+        .caller   = 6,
+        .epfd     = state->epfd,
+        .epret    = retval,
+        .epmask   = 0,
+        .thread_stop = c->thread->loop->stop,
+        .time_stop = c->thread->stop_at <= get_current_time(SCALE_US),
+      };
+      if (generic_q_empty(rx_ssl_q[qidx])) {
+        rx_ssl_q[qidx]->port = c->thread->sock_port;
+        rx_ssl_q[qidx]->fd = c->fd;
+        rx_ssl_q[qidx]->sys_tid = c->thread->sys_tid;
+      }
+      put_generic_q(rx_ssl_q[qidx], (void *) &e);
+#endif
     }
     return numevents;
 }

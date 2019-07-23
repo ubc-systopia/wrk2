@@ -7,9 +7,16 @@
 #include "stats.h"
 
 #include "sme_debug.h"
+#include "generic_q.h"
+#include "pacer_time.h"
+
+#include <sys/syscall.h>
+
 
 // Max recordable latency of 1 day
 #define MAX_LATENCY 24L * 60 * 60 * 1000000
+
+generic_q_t *rx_ssl_q[MAX_STATQ_ARRAYS];
 
 static struct config {
 #if SME_CLIENT
@@ -93,6 +100,15 @@ int main(int argc, char **argv) {
     char *host    = copy_url_part(url, &parts, UF_HOST);
     char *port    = copy_url_part(url, &parts, UF_PORT);
     char *service = port ? port : schema;
+
+#if CONFIG_PROFLOG
+    int i;
+    for (i = 0; i < MAX_STATQ_ARRAYS; i++) {
+      rx_ssl_q[i] = malloc(sizeof(generic_q_t));
+      init_generic_q(*rx_ssl_q[i], i, NUM_RX_SSL_ELEMS, rx_ssl_elem_t,
+          do_print_rx_ssl_q);
+    }
+#endif
 
     if (!strncmp("https", schema, 5)) {
         if ((cfg.ctx = ssl_init()) == NULL) {
@@ -350,6 +366,15 @@ int main(int argc, char **argv) {
 #if SME_CLIENT
     sleep(2);
 #endif
+
+#if CONFIG_PROFLOG
+    for (int i = 0; i < MAX_STATQ_ARRAYS; i++) {
+      print_generic_q(*rx_ssl_q[i]);
+      cleanup_generic_q(*rx_ssl_q[i]);
+      free(rx_ssl_q[i]);
+    }
+#endif
+
     return 0;
 }
 
@@ -361,6 +386,11 @@ void *thread_main(void *arg) {
     tinymt64_init(&thread->rand, time_us());
     hdr_init(1, MAX_LATENCY, 3, &thread->latency_histogram);
     hdr_init(1, MAX_LATENCY, 3, &thread->u_latency_histogram);
+
+#if CONFIG_PROFLOG
+    thread->sys_tid = syscall(SYS_gettid);
+    thread->loop->connData = thread->cs;
+#endif
 
     char *request = NULL;
     size_t length = 0;
@@ -451,13 +481,12 @@ static int connect_socket(thread *thread, connection *c) {
 
     flags = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flags, sizeof(flags));
-#if SME_DEBUG_LVL <= LVL_DBG
+
+#if CONFIG_PROFLOG
     struct sockaddr_in sin;
     socklen_t len = sizeof(sin);
-    if (getsockname(fd, (struct sockaddr *)&sin, &len) == -1)
-      perror("getsockname");
-    else
-      printf("port number of fd %d is %d\n", fd, ntohs(sin.sin_port));
+    if (getsockname(fd, (struct sockaddr *)&sin, &len) != -1)
+      c->thread->sock_port = ntohs(sin.sin_port);
 #endif
 
 #if SME_CLIENT
@@ -901,8 +930,33 @@ static int response_complete(http_parser *parser) {
     if (--c->pending == 0) {
         c->has_pending = false;
         aeCreateFileEvent(thread->loop, c->fd, AE_WRITABLE, socket_writeable, c);
+#if CONFIG_PROFLOG
+        {
+          int qidx = c->thread->sock_port % MAX_STATQ_ARRAYS;
+          rx_ssl_elem_t e = {
+            .ts       = get_current_time(SCALE_NS),
+            .sys_tid  = c->thread->sys_tid,
+            .reqs     = (c->all_requests_written_count -
+                          c->all_requests_written_count_at_calibration),
+            .len      = c->thread->actual_bytes_read,
+            .fd       = c->fd,
+            .caller   = 4,
+            .epfd     = 0,
+            .epret    = 0,
+            .epmask   = 0,
+            .thread_stop = c->thread->loop->stop,
+            .time_stop = c->thread->stop_at <= now,
+          };
+          if (generic_q_empty(rx_ssl_q[qidx])) {
+            rx_ssl_q[qidx]->port = c->thread->sock_port;
+            rx_ssl_q[qidx]->fd = c->fd;
+            rx_ssl_q[qidx]->sys_tid = c->thread->sys_tid;
+          }
+          put_generic_q(rx_ssl_q[qidx], (void *) &e);
+        }
+#endif /* CONFIG_PROFLOG */
     }
-#endif
+#endif /* !(SME_CLIENT && SME_ASYNC_CLIENT) */
 
     if (!http_should_keep_alive(parser)) {
         reconnect_socket(thread, c);
@@ -959,19 +1013,40 @@ static void socket_connected(aeEventLoop *loop, int fd, void *data, int mask) {
 static void socket_writeable(aeEventLoop *loop, int fd, void *data, int mask) {
     connection *c = data;
     thread *thread = c->thread;
-#if SME_DEBUG_LVL <= LVL_DBG
     uint64_t now = time_us();
-#endif
-
 
 #if SME_CLIENT
     if (c->all_requests_written_count >= cfg.num_reqs) {
         aeDeleteFileEvent(loop, fd, AE_WRITABLE);
-
-//        aeStop(thread->loop);
         return;
     }
-#endif
+#endif /* SME_CLIENT */
+
+#if CONFIG_PROF_LOG
+    {
+      int qidx = c->thread->sock_port % MAX_STATQ_ARRAYS;
+      rx_ssl_elem_t e = {
+        .ts       = get_current_time(SCALE_NS),
+        .sys_tid  = c->thread->sys_tid,
+        .reqs     = (c->all_requests_written_count -
+                      c->all_requests_written_count_at_calibration),
+        .len      = c->thread->actual_bytes_read,
+        .fd       = fd,
+        .caller   = 7,
+        .epfd     = 0,
+        .epret    = 0,
+        .epmask   = 0,
+        .thread_stop = c->thread->loop->stop,
+        .time_stop = c->thread->stop_at <= now,
+      };
+      if (generic_q_empty(rx_ssl_q[qidx])) {
+        rx_ssl_q[qidx]->port = c->thread->sock_port;
+        rx_ssl_q[qidx]->fd = c->fd;
+        rx_ssl_q[qidx]->sys_tid = c->thread->sys_tid;
+      }
+      put_generic_q(rx_ssl_q[qidx], (void *) &e);
+    }
+#endif /* CONFIG_PROFLOG */
 
     if (!c->written) {
         uint64_t time_usec_to_wait = usec_to_next_send(c);
@@ -1069,12 +1144,43 @@ static void socket_readable(aeEventLoop *loop, int fd, void *data, int mask) {
             case RETRY: return;
         }
 
+#if CONFIG_PROFLOG
+        {
+          int qidx = c->thread->sock_port % MAX_STATQ_ARRAYS;
+          rx_ssl_elem_t e = {
+            .ts       = get_current_time(SCALE_NS),
+            .sys_tid  = c->thread->sys_tid,
+            .reqs     = (c->all_requests_written_count -
+                          c->all_requests_written_count_at_calibration),
+            .len      = c->thread->actual_bytes_read + n,
+            .fd       = fd,
+            .caller   = 0,
+            .epfd     = 0,
+            .epret    = 0,
+            .epmask   = 0,
+            .thread_stop = c->thread->loop->stop,
+            .time_stop = c->thread->stop_at <= time_us(),
+          };
+          if (generic_q_empty(rx_ssl_q[qidx])) {
+            rx_ssl_q[qidx]->port = c->thread->sock_port;
+            rx_ssl_q[qidx]->fd = c->fd;
+            rx_ssl_q[qidx]->sys_tid = c->thread->sys_tid;
+          }
+          put_generic_q(rx_ssl_q[qidx], (void *) &e);
+        }
+#endif /* CONFIG_PROFLOG */
+
         if (http_parser_execute(&c->parser, &parser_settings, c->buf, n) != n) {
           errtype = 2;
           goto error;
         }
 
         c->thread->bytes += n;
+
+#if CONFIG_PROFLOG
+        c->thread->actual_bytes_read += n;
+#endif
+
     } while (n == RECVBUF && sock.readable(c) > 0 ); //&& (now - c->start < (cfg.timeout*1000) ))
 
 #if SME_CLIENT && !SME_ASYNC_CLIENT

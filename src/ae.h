@@ -33,6 +33,8 @@
 #ifndef __AE_H__
 #define __AE_H__
 
+#include "config.h"
+
 #define AE_OK 0
 #define AE_ERR -1
 
@@ -95,6 +97,9 @@ typedef struct aeEventLoop {
     int stop;
     void *apidata; /* This is used for polling API specific data */
     aeBeforeSleepProc *beforesleep;
+#if CONFIG_PROFLOG
+    void *connData;
+#endif
 } aeEventLoop;
 
 /* Prototypes */

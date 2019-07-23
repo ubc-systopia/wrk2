@@ -44,6 +44,10 @@
 #include "zmalloc.h"
 #include "config.h"
 
+#include "wrk.h"
+#include "pacer_time.h"
+#include "generic_q.h"
+
 /* Include the best multiplexing layer supported by this system.
  * The following should be ordered by performances, descending. */
 #ifdef HAVE_EVPORT
@@ -373,6 +377,47 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
             int mask = eventLoop->fired[j].mask;
             int fd = eventLoop->fired[j].fd;
             int rfired = 0;
+
+#if CONFIG_PROFLOG
+            connection *c = (connection *) fe->clientData;
+            {
+              int qidx = c->thread->sock_port % MAX_STATQ_ARRAYS;
+              int event_type = 0;
+              if ((fe->mask & mask & AE_READABLE) != 0
+                  && (fe->mask & mask & AE_WRITABLE) == 0)
+                event_type = 1;
+              else if ((fe->mask & mask & AE_READABLE) == 0
+                  && (fe->mask & mask & AE_WRITABLE) != 0)
+                event_type = 2;
+              else
+                event_type = 3;
+              rx_ssl_elem_t e = {
+                .ts       = get_current_time(SCALE_NS),
+                .sys_tid  = c->thread->sys_tid,
+                .reqs     = (c->all_requests_written_count -
+                              c->all_requests_written_count_at_calibration),
+                .len      = c->thread->actual_bytes_read,
+                .fd       = fd,
+                .caller   = event_type,
+                .epfd     = 0,
+                .epret    = 0,
+                .epmask   = 0,
+                .thread_stop = c->thread->loop->stop,
+                .time_stop = c->thread->stop_at <= get_current_time(SCALE_US),
+              };
+              if (generic_q_empty(rx_ssl_q[qidx])) {
+                rx_ssl_q[qidx]->port = c->thread->sock_port;
+                rx_ssl_q[qidx]->fd = c->fd;
+                rx_ssl_q[qidx]->sys_tid = c->thread->sys_tid;
+              }
+              put_generic_q(rx_ssl_q[qidx], (void *) &e);
+
+              // reset actual_bytes_read here
+              if (event_type == 2)
+                c->thread->actual_bytes_read = 0;
+
+            }
+#endif
 
 	    /* note the fe->mask & mask & ... code: maybe an already processed
              * event removed an element that fired and we still didn't

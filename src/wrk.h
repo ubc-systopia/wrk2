@@ -39,6 +39,11 @@ typedef struct {
     int id;
     errors errors_at_calibration;
 #endif
+#if CONFIG_PROFLOG
+    int sys_tid;
+    int sock_port;
+    uint64_t actual_bytes_read;
+#endif
     uint64_t complete;
     uint64_t requests;
     uint64_t bytes;
