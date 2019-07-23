@@ -771,7 +771,8 @@ static int delay_request(aeEventLoop *loop, long long id, void *data) {
 #endif
 }
 
-static int response_complete(http_parser *parser) {
+static int response_complete(http_parser *parser)
+{
     connection *c = parser->data;
     thread *thread = c->thread;
     uint64_t now = time_us();
@@ -1003,7 +1004,7 @@ static void socket_connected(aeEventLoop *loop, int fd, void *data, int mask) {
 #endif
     return;
 
-  error:
+error:
     //printf("Error connecting on fd: %i at: %lu\n", fd, now);
     c->thread->errors.connect++;
     reconnect_socket(c->thread, c);
@@ -1105,24 +1106,31 @@ static void socket_writeable(aeEventLoop *loop, int fd, void *data, int mask) {
         c->written = 0;
         aeDeleteFileEvent(loop, fd, AE_WRITABLE);
     }
+
     //potential bug if write over multiple writes
 #if SME_CLIENT && SME_ASYNC_CLIENT
     insert(c->start, &(c->head_time), &(c->tail_time));
-    //list( c->head_time, c->tail_time);
 #endif
 
-#if SME_DEBUG_LVL <= LVL_DBG
-    uint64_t preparing_for_write = time_us() - now;
-    wprint(LVL_DBG, "Written Request at: %lu, preparation and writing time took %lu"
-        , c->start, preparing_for_write);
-#endif
+    wprint(LVL_DBG, "[%lu] fd %d prev delta %lu actual start %lu c->start %lu "
+        "req written %ld req completed %ld req len %lu %ld stop %d"
+        , (c->start - thread->start), fd, (c->start - previous_c_start)
+        , c->actual_latency_start, c->start
+        , (c->all_requests_written_count -
+          c->all_requests_written_count_at_calibration)
+        , (c->all_requests_count - c->all_requests_count_at_calibration)
+        , len, n
+        , (c->thread->stop_at <= time_us())
+        );
+
 #if SME_CLIENT
     c->all_requests_written_count++;
     c->request_written = 1;
 #endif
+
     return;
 
-  error:
+error:
     wprint(LVL_DBG, "Error Writing Request on fd: %i at: %lu", fd, time_us());
     thread->errors.write++;
     reconnect_socket(thread, c);
@@ -1136,14 +1144,6 @@ static void socket_readable(aeEventLoop *loop, int fd, void *data, int mask) {
 
     do {
 
-     // if (now - c->start > cfg.timeout*1000) {
-     //     c->all_requests_count++;
-     //     c->thread->errors.timeout++;
-
-     //     printf("TO Reading %lu bytes from fd: %i after %lu us from request at %lu\n", n, fd, now - c->start, c->start );
-     //     reconnect_socket(c->thread, c);
-     //     return;
-     //  }
         switch (sock.read(c, &n)) {
             case OK:    break;
             case ERROR: errtype = 1; goto error;
@@ -1201,8 +1201,8 @@ static void socket_readable(aeEventLoop *loop, int fd, void *data, int mask) {
     return;
 
 error:
-    wprint(LVL_EXP, "read err %d #bytes %lu fd %i after %lu us from request at %lu"
-        , errtype, n, fd, time_us() - c->start, c->start);
+    wprint(LVL_EXP, "%lu read err %d #bytes %lu@%lu fd %i"
+        , time_us() - c->start, errtype, n, c->thread->bytes, fd);
     c->thread->errors.read++;
     reconnect_socket(c->thread, c);
 
@@ -1252,7 +1252,6 @@ static int parse_args(struct config *cfg, char **url, struct http_parser_url *pa
     cfg->connections = 10;
     cfg->duration    = 10;
     cfg->timeout     = SOCKET_TIMEOUT_MS;
-    //printf("Timeout Value: = %lld\n", SOCKET_TIMEOUT_MS);
     cfg->rate        = 0;
     cfg->record_all_responses = true;
     cfg->num_reqs = 9223372036854776;
