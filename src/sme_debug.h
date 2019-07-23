@@ -10,11 +10,16 @@
 #ifndef __SME_DEBUG_H__
 #define __SME_DEBUG_H__
 
+#include <stdint.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sched.h>
 
 #include "config.h"
+
+#include "pacer_time.h"
+
+#define WSTR  "WRK2"
 
 #define itrace  \
   do {  \
@@ -28,8 +33,8 @@
 #define wprint(LVL, F, A...)  \
   do {  \
     if (SME_DEBUG_LVL <= LVL) { \
-      printf("(%d) %s:%d " F "\n"  \
-          , getpid() \
+      printf("%ld %s (%d) %s:%d " F "\n"  \
+          , (uint64_t) get_current_time(SCALE_NS), WSTR, getpid() \
           , __func__, __LINE__, A); \
     } \
   } while (0)
