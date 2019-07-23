@@ -1020,6 +1020,12 @@ static void socket_writeable(aeEventLoop *loop, int fd, void *data, int mask) {
         aeDeleteFileEvent(loop, fd, AE_WRITABLE);
         return;
     }
+
+    // time over, do not send a new request
+    if (c->thread->stop_at <= now && !c->written) {
+      aeDeleteFileEvent(loop, fd, AE_WRITABLE);
+      return;
+    }
 #endif /* SME_CLIENT */
 
 #if CONFIG_PROF_LOG
