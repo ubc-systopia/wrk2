@@ -20,7 +20,8 @@ else ifeq ($(TARGET), freebsd)
 endif
 
 SRC  := list.c wrk.c net.c ssl.c aprintf.c stats.c script.c units.c \
-		ae.c zmalloc.c http_parser.c tinymt64.c hdr_histogram.c
+		ae.c zmalloc.c http_parser.c tinymt64.c hdr_histogram.c	\
+		generic_q.c
 BIN  := wrk
 
 ODIR := obj
@@ -41,7 +42,8 @@ $(BIN): $(OBJ)
 	@echo LINK $(BIN)
 	@$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
-$(OBJ): config.h wrk.h sme_debug.h Makefile $(LDIR)/libluajit.a | $(ODIR)
+$(OBJ): config.h wrk.h sme_debug.h generic_q.h pacer_time.h	\
+	Makefile $(LDIR)/libluajit.a | $(ODIR)
 
 $(ODIR):
 	@mkdir -p $@
