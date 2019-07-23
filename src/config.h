@@ -40,4 +40,14 @@
 #define REQUEST_RANDOMIZATION_US 10000
 
 #define TIMEOUT_LOOP_FREQ   4
+
+#define MAX_STATQ_ARRAYS  257
+#define NUM_RX_SSL_ELEMS  1000000
+
+#define FACTOR_NS          (1000*1000*1000)
+#define FACTOR_US          (1000*1000)
+#define FACTOR_MS          (1000)
+
+#define CONFIG_PROFLOG  0
+
 #endif /* CONFIG_H */
