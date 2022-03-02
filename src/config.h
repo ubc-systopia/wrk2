@@ -39,7 +39,7 @@
 // randomly picked from 0 - RANDOMIZATION_US
 #define REQUEST_RANDOMIZATION_US 10000
 
-#define TIMEOUT_LOOP_FREQ   4
+#define TIMEOUT_LOOP_FREQ   2
 
 #define MAX_STATQ_ARRAYS  257
 #define NUM_RX_SSL_ELEMS  1000000

@@ -101,11 +101,11 @@ typedef struct rx_ssl_elem {
   uint64_t len;
   uint32_t sys_tid;
   uint32_t reqs;
+  int32_t epfd;
   uint8_t fd;
   uint8_t caller;
-  uint8_t epfd;
-  uint8_t epret;
-  uint8_t epmask;
+  int8_t epret;
+  int8_t epmask;
   uint8_t thread_stop:4,
           time_stop:4;
 } rx_ssl_elem_t;

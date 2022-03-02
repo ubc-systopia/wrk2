@@ -187,7 +187,7 @@ int main(int argc, char **argv) {
 
         if (!t->loop || pthread_create(&t->thread, NULL, &thread_main, t)) {
             char *msg = strerror(errno);
-            fprintf(stderr, "unable to create thread %"PRIu64": %s\n", i, msg);
+            fprintf(stderr, "Err %d unable to create thread %"PRIu64": %s\n", errno, i, msg);
             exit(2);
         }
 #if SME_CLIENT && SME_STAGGER_WORKERS
@@ -813,8 +813,10 @@ static int response_complete(http_parser *parser)
     // requests we can easily end up "gifting" them time and seeing
     // negative latencies.
 #if SME_CLIENT
+//    uint64_t expected_latency_start = c->thread_start +
+//            ((c->all_requests_count - 1 )/ c->throughput);
     uint64_t expected_latency_start = c->thread_start +
-            ((c->all_requests_count -1 )/ c->throughput);
+            ((c->complete_at_last_batch_start)/ c->throughput);
 #else
     uint64_t expected_latency_start = c->thread_start +
             (c->complete_at_last_batch_start / c->throughput);
@@ -849,9 +851,11 @@ static int response_complete(http_parser *parser)
         printf("  c->thread_start = %lu\n", c->thread_start);
         printf("  c->complete = %lu\n", c->complete);
 #if SME_CLIENT
+        printf("  c->complete_at_last_batch_start = %lu\n", c->complete_at_last_batch_start);
+        printf("  req_random = %lu\n", req_random);
         printf("  c->all_requests_count = %lu\n", c->all_requests_count);
 #endif
-        printf("  throughput = %g\n", c->throughput);
+        printf("  throughput = %lf\n", c->throughput);
         printf("  latest_should_send_time = %lu\n", c->latest_should_send_time);
         printf("  latest_expected_start = %lu\n", c->latest_expected_start);
         printf("  latest_connect = %lu\n", c->latest_connect);
@@ -1130,13 +1134,15 @@ static void socket_readable(aeEventLoop *loop, int fd, void *data, int mask) {
     connection *c = data;
     size_t n;
     int errtype = 0;
+    int r = 0;
 
     do {
 
-        switch (sock.read(c, &n)) {
+        switch ((r = sock.read(c, &n))) {
             case OK:    break;
-            case ERROR: errtype = 1; goto error;
             case RETRY: return;
+            case ERROR:
+            default: errtype = 1; goto error;
         }
 
 #if CONFIG_PROFLOG
