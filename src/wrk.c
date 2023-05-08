@@ -8,6 +8,11 @@
 
 // Max recordable latency of 1 day
 #define MAX_LATENCY 24L * 60 * 60 * 1000000
+#ifdef RECORD_STATS
+static int64_t **expected_times; // int64_t[threads][requests_per_thread]
+static uint64_t **actual_times; // int64_t[threads][requests_per_thread]
+static int64_t **start_times;  // int64_t[threads][requests_per_thread]
+#endif
 
 static struct config {
     uint64_t threads;
@@ -82,7 +87,22 @@ int main(int argc, char **argv) {
         usage();
         exit(1);
     }
+#ifdef RECORD_STATS
 
+    // Malloc the arrays to 2 times the required size
+    // wrk2 does best effort to balance requests per thread, but there
+    // might be some +-, so 2 times should be more than sufficient a space
+    expected_times = (int64_t **)malloc(cfg.threads * sizeof(int64_t *));
+    actual_times = (uint64_t **)malloc(cfg.threads * sizeof(uint64_t *));
+    start_times = (int64_t **)malloc(cfg.threads * sizeof(int64_t *));
+    uint64_t malloc_size =
+        (2 * cfg.duration * cfg.rate / cfg.threads) * sizeof(int64_t);
+    for (int i = 0;i < cfg.threads; i++) {
+      expected_times[i] = (int64_t *) malloc(malloc_size);
+      actual_times[i] = (uint64_t *) malloc(malloc_size);
+      start_times[i] = (int64_t *) malloc(malloc_size);
+    }
+#endif
     char *schema  = copy_url_part(url, &parts, UF_SCHEMA);
     char *host    = copy_url_part(url, &parts, UF_HOST);
     char *port    = copy_url_part(url, &parts, UF_PORT);
@@ -100,9 +120,9 @@ int main(int argc, char **argv) {
         sock.write    = ssl_write;
         sock.readable = ssl_readable;
     }
-	
+
     cfg.host = host;
-	
+
     signal(SIGPIPE, SIG_IGN);
     signal(SIGINT,  SIG_IGN);
 
@@ -119,7 +139,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "unable to connect to %s:%s %s\n", host, service, msg);
         exit(1);
     }
-    
+
     uint64_t connections = cfg.connections / cfg.threads;
     double throughput    = (double)cfg.rate / cfg.threads;
     uint64_t stop_at     = time_us() + (cfg.duration * 1000000);
@@ -130,7 +150,10 @@ int main(int argc, char **argv) {
         t->connections = connections;
         t->throughput = throughput;
         t->stop_at     = stop_at;
-
+#ifdef RECORD_STATS
+        t->thread_id    = (int)i;
+        t->num_sent_requests = 0;
+#endif
         t->L = script_create(cfg.script, url, headers);
         script_init(L, t, argc - optind, &argv[optind]);
 
@@ -238,6 +261,30 @@ int main(int argc, char **argv) {
     printf("Requests/sec: %9.2Lf\n", req_per_s);
     printf("Transfer/sec: %10sB\n", format_binary(bytes_per_s));
 
+#ifdef RECORD_STATS
+  // Write the stats file
+    FILE *f = fopen("stats.csv", "w");
+    if (f == NULL) return -1;
+    for (int i = 0; i < cfg.threads; i++) {
+      fprintf(f, "start_time %d, expected_time %d, actual_time %d, ", i, i, i);
+    }
+    fprintf(f, "\n");
+    for (int i = 0; i < (2 * cfg.rate * cfg.duration) / cfg.threads; i++) {
+      bool all_empty = true;
+      for (int j = 0; j < cfg.threads; j++) {
+        if (threads[j].complete > i) {
+          all_empty = false;
+          fprintf(f, "%ld, ", start_times[j][i] - start_times[j][0]);
+          fprintf(f, "%ld, ", expected_times[j][i]);
+          fprintf(f, "%ld, ", actual_times[j][i]);
+        }
+        else
+          fprintf(f, ", , , ");
+      }
+      fprintf(f, "\n");
+      if (all_empty) break;
+    }
+#endif
     if (script_has_done(L)) {
         script_summary(L, runtime_us, complete, bytes);
         script_errors(L, &errors);
@@ -556,6 +603,12 @@ static int response_complete(http_parser *parser) {
 
         uint64_t actual_latency_timing = now - c->actual_latency_start;
         hdr_record_value(thread->u_latency_histogram, actual_latency_timing);
+#ifdef RECORD_STATS
+      expected_times[thread->thread_id][thread->complete] =
+            expected_latency_timing;
+        actual_times[thread->thread_id][thread->complete] =
+            actual_latency_timing;
+#endif
     }
 
 
@@ -623,7 +676,11 @@ static void socket_writeable(aeEventLoop *loop, int fd, void *data, int mask) {
     if (!c->written) {
         c->start = time_us();
         if (!c->has_pending) {
-            c->actual_latency_start = c->start;
+#ifdef RECORD_STATS
+          start_times[c->thread->thread_id][c->thread->num_sent_requests++] =
+#endif
+                c->actual_latency_start = c->start;
+
             c->complete_at_last_batch_start = c->complete;
             c->has_pending = true;
         }

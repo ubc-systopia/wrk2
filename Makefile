@@ -1,4 +1,5 @@
-CFLAGS  := -std=c99 -Wall -O2 -D_REENTRANT
+#CFLAGS  := -std=c99 -Wall -O2 -D_REENTRANT
+CFLAGS  := -std=c99 -Wall -O2 -D_REENTRANT -DRECORD_STATS
 LIBS    := -lpthread -lm -lcrypto -lssl
 
 TARGET  := $(shell uname -s | tr '[A-Z]' '[a-z]' 2>/dev/null || echo unknown)
