@@ -30,7 +30,7 @@
 #define SME_RANDOMIZE_IRQ 1
 
 //Asynchronous request generation, as per the open loop assumption
-#define SME_ASYNC_CLIENT 0
+#define SME_ASYNC_CLIENT 1
 
 // Amount of time to be used for randomization, 
 // OLD: If set to x then all randomizations will be +/- x for SME_RANDOMIZE_IRQ 

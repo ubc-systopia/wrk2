@@ -433,7 +433,7 @@ void *thread_main(void *arg) {
         c->caught_up  = true;
 
         // Stagger connects 5 msec apart within thread:
-        aeCreateTimeEvent(loop, i * 5, delayed_initial_connect, c, NULL);
+        aeCreateTimeEvent(loop, i * 5000, delayed_initial_connect, c, NULL);
     }
 
 
@@ -446,10 +446,11 @@ void *thread_main(void *arg) {
     uint64_t timeout_delay = TIMEOUT_INTERVAL_MS + (thread->connections * 5);
 #endif
 
-    aeCreateTimeEvent(loop, calibrate_delay, calibrate, thread, NULL);
+    aeCreateTimeEvent(loop, calibrate_delay * 1000, calibrate, thread, NULL);
 
 #if SME_CLIENT
-    aeCreateTimeEvent(loop, timeout_delay/TIMEOUT_LOOP_FREQ, check_timeouts, thread, NULL);
+    aeCreateTimeEvent(loop, timeout_delay/TIMEOUT_LOOP_FREQ * 1000,
+                      check_timeouts, thread, NULL);
 #else
     aeCreateTimeEvent(loop, timeout_delay, check_timeouts, thread, NULL);
 #endif
@@ -761,11 +762,12 @@ static int delay_request(aeEventLoop *loop, long long id, void *data) {
     aeCreateFileEvent(c->thread->loop, c->fd, AE_WRITABLE, socket_writeable, c);
 #if SME_CLIENT && SME_ASYNC_CLIENT
 #if SME_RANDOMIZE_IRQ
-    double delay_for_next = 500/(c->throughput*1000000);// - REQUEST_RANDOMIZATION_US;
+    double delay_for_next = 500000/(c->throughput*1000000);// -
+    // REQUEST_RANDOMIZATION_US;
 #else
-    double delay_for_next = 1000/(c->throughput*1000000);
+    double delay_for_next = 1000000/(c->throughput*1000000);
 #endif
-    return (delay_for_next < 1)? 1: (int)delay_for_next; //
+    return (delay_for_next < 100)? 100: (int)delay_for_next; // 100 microseconds
 #else
     return AE_NOMORE;
 #endif
@@ -852,7 +854,9 @@ static int response_complete(http_parser *parser)
         printf("  c->complete = %lu\n", c->complete);
 #if SME_CLIENT
         printf("  c->complete_at_last_batch_start = %lu\n", c->complete_at_last_batch_start);
+#if SME_RANDOMIZE_IRQ
         printf("  req_random = %lu\n", req_random);
+#endif
         printf("  c->all_requests_count = %lu\n", c->all_requests_count);
 #endif
         printf("  throughput = %lf\n", c->throughput);
@@ -1068,7 +1072,7 @@ static void socket_writeable(aeEventLoop *loop, int fd, void *data, int mask) {
             // Not yet time to send. Delay:
             aeDeleteFileEvent(loop, fd, AE_WRITABLE);
             aeCreateTimeEvent(
-                    thread->loop, msec_to_wait, delay_request, c, NULL);
+                    thread->loop, msec_to_wait * 1000, delay_request, c, NULL);
             return;
         }
         c->latest_write = time_us();

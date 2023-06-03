@@ -151,30 +151,31 @@ int aeGetFileEvents(aeEventLoop *eventLoop, int fd) {
     return fe->mask;
 }
 
-static void aeGetTime(long *seconds, long *milliseconds)
+static void aeGetTime(long *seconds, long *microseconds)
 {
     struct timeval tv;
 
     gettimeofday(&tv, NULL);
     *seconds = tv.tv_sec;
-    *milliseconds = tv.tv_usec/1000;
+    *microseconds = tv.tv_usec;
 }
 
-static void aeAddMillisecondsToNow(long long milliseconds, long *sec, long *ms) {
-    long cur_sec, cur_ms, when_sec, when_ms;
+static void aeAddMicrosecondsToNow(long long microseconds, long *sec, long *us)
+{
+    long cur_sec, cur_us, when_sec, when_us;
 
-    aeGetTime(&cur_sec, &cur_ms);
-    when_sec = cur_sec + milliseconds/1000;
-    when_ms = cur_ms + milliseconds%1000;
-    if (when_ms >= 1000) {
+    aeGetTime(&cur_sec, &cur_us);
+    when_sec = cur_sec + microseconds/1000000;
+    when_us = cur_us + microseconds%1000000;
+    if (when_us >= 1000000) {
         when_sec ++;
-        when_ms -= 1000;
+        when_us -= 1000000;
     }
     *sec = when_sec;
-    *ms = when_ms;
+    *us = when_us;
 }
 
-long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
+long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long microseconds,
         aeTimeProc *proc, void *clientData,
         aeEventFinalizerProc *finalizerProc)
 {
@@ -184,7 +185,7 @@ long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
     te = zmalloc(sizeof(*te));
     if (te == NULL) return AE_ERR;
     te->id = id;
-    aeAddMillisecondsToNow(milliseconds,&te->when_sec,&te->when_ms);
+    aeAddMicrosecondsToNow(microseconds,&te->when_sec,&te->when_us);
     te->timeProc = proc;
     te->finalizerProc = finalizerProc;
     te->clientData = clientData;
@@ -234,7 +235,7 @@ static aeTimeEvent *aeSearchNearestTimer(aeEventLoop *eventLoop)
     while(te) {
         if (!nearest || te->when_sec < nearest->when_sec ||
                 (te->when_sec == nearest->when_sec &&
-                 te->when_ms < nearest->when_ms))
+                 te->when_us < nearest->when_us))
             nearest = te;
         te = te->next;
     }
@@ -268,16 +269,16 @@ static int processTimeEvents(aeEventLoop *eventLoop) {
     te = eventLoop->timeEventHead;
     maxId = eventLoop->timeEventNextId-1;
     while(te) {
-        long now_sec, now_ms;
+        long now_sec, now_us;
         long long id;
 
         if (te->id > maxId) {
             te = te->next;
             continue;
         }
-        aeGetTime(&now_sec, &now_ms);
+        aeGetTime(&now_sec, &now_us);
         if (now_sec > te->when_sec ||
-            (now_sec == te->when_sec && now_ms >= te->when_ms))
+            (now_sec == te->when_sec && now_us >= te->when_us))
         {
             int retval;
 
@@ -298,7 +299,7 @@ static int processTimeEvents(aeEventLoop *eventLoop) {
              * deletion (putting references to the nodes to delete into
              * another linked list). */
             if (retval != AE_NOMORE) {
-                aeAddMillisecondsToNow(retval,&te->when_sec,&te->when_ms);
+                aeAddMicrosecondsToNow(retval,&te->when_sec,&te->when_us);
             } else {
                 aeDeleteTimeEvent(eventLoop, id);
             }
@@ -343,18 +344,18 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
         if (flags & AE_TIME_EVENTS && !(flags & AE_DONT_WAIT))
             shortest = aeSearchNearestTimer(eventLoop);
         if (shortest) {
-            long now_sec, now_ms;
+            long now_sec, now_us;
 
             /* Calculate the time missing for the nearest
              * timer to fire. */
-            aeGetTime(&now_sec, &now_ms);
+            aeGetTime(&now_sec, &now_us);
             tvp = &tv;
             tvp->tv_sec = shortest->when_sec - now_sec;
-            if (shortest->when_ms < now_ms) {
-                tvp->tv_usec = ((shortest->when_ms+1000) - now_ms)*1000;
+            if (shortest->when_us < now_us) {
+                tvp->tv_usec = ((shortest->when_us+1000000) - now_us);
                 tvp->tv_sec --;
             } else {
-                tvp->tv_usec = (shortest->when_ms - now_ms)*1000;
+                tvp->tv_usec = (shortest->when_us - now_us);
             }
             if (tvp->tv_sec < 0) tvp->tv_sec = 0;
             if (tvp->tv_usec < 0) tvp->tv_usec = 0;
