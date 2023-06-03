@@ -544,7 +544,7 @@ static int calibrate(aeEventLoop *loop, long long id, void *data) {
             thread->latency_histogram, 90.0) / 1000.0L;
     long double interval = MAX(latency * 2, 10);
 
-    if (mean == 0) return CALIBRATE_DELAY_MS;
+    if (mean == 0) return CALIBRATE_DELAY_MS * 1000;
 
     thread->mean     = (uint64_t) mean;
     hdr_reset(thread->latency_histogram);
@@ -634,7 +634,7 @@ static int check_timeouts(aeEventLoop *loop, long long id, void *data) {
     }
 
 #if SME_CLIENT
-    return cfg.timeout/TIMEOUT_LOOP_FREQ;// TIMEOUT_INTERVAL_MS;
+    return cfg.timeout/TIMEOUT_LOOP_FREQ * 1000;// TIMEOUT_INTERVAL_MS;
 #else
     return cfg.timeout;// TIMEOUT_INTERVAL_MS;
 #endif
@@ -756,7 +756,7 @@ static int delay_request(aeEventLoop *loop, long long id, void *data) {
     connection* c = data;
     uint64_t time_usec_to_wait = usec_to_next_send(c);
     if (time_usec_to_wait) {
-        return round((time_usec_to_wait / 1000.0L) ); /* don't send, wait */
+        return time_usec_to_wait < 100 ? 100 : time_usec_to_wait; /* don't send, wait */
     }
 //    aeCreateFileEvent(c->thread->loop, c->fd, AE_READABLE, socket_readable, c);
     aeCreateFileEvent(c->thread->loop, c->fd, AE_WRITABLE, socket_writeable, c);
@@ -767,7 +767,7 @@ static int delay_request(aeEventLoop *loop, long long id, void *data) {
 #else
     double delay_for_next = 1000000/(c->throughput*1000000);
 #endif
-    return (delay_for_next < 100)? 100: (int)delay_for_next; // 100 microseconds
+    return (delay_for_next < 100)? 100: (int)delay_for_next;
 #else
     return AE_NOMORE;
 #endif
