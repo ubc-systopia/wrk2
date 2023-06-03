@@ -756,7 +756,9 @@ static int delay_request(aeEventLoop *loop, long long id, void *data) {
     connection* c = data;
     uint64_t time_usec_to_wait = usec_to_next_send(c);
     if (time_usec_to_wait) {
-        return time_usec_to_wait < 100 ? 100 : time_usec_to_wait; /* don't send, wait */
+        // 400 is arbitrarily chosen (based on the current testbed)
+        return time_usec_to_wait < 400 ? 400 : time_usec_to_wait; /* don't
+ * send, wait */
     }
 //    aeCreateFileEvent(c->thread->loop, c->fd, AE_READABLE, socket_readable, c);
     aeCreateFileEvent(c->thread->loop, c->fd, AE_WRITABLE, socket_writeable, c);
@@ -767,7 +769,8 @@ static int delay_request(aeEventLoop *loop, long long id, void *data) {
 #else
     double delay_for_next = 1000000/(c->throughput*1000000);
 #endif
-    return (delay_for_next < 100)? 100: (int)delay_for_next;
+    // 400 is arbitrarily chosen based on the current testbed
+    return (delay_for_next < 400)? 400: (int)delay_for_next;
 #else
     return AE_NOMORE;
 #endif
@@ -1071,8 +1074,12 @@ static void socket_writeable(aeEventLoop *loop, int fd, void *data, int mask) {
 
             // Not yet time to send. Delay:
             aeDeleteFileEvent(loop, fd, AE_WRITABLE);
+#ifdef SME_ASYNC_CLIENT
+#else
+            // TODO: Check if this is necessary for async client
             aeCreateTimeEvent(
                     thread->loop, msec_to_wait * 1000, delay_request, c, NULL);
+#endif
             return;
         }
         c->latest_write = time_us();

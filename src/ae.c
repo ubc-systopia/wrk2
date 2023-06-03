@@ -340,11 +340,11 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
         int j;
         aeTimeEvent *shortest = NULL;
         struct timeval tv, *tvp;
+        long now_sec, now_us;
 
         if (flags & AE_TIME_EVENTS && !(flags & AE_DONT_WAIT))
             shortest = aeSearchNearestTimer(eventLoop);
         if (shortest) {
-            long now_sec, now_us;
 
             /* Calculate the time missing for the nearest
              * timer to fire. */
@@ -373,6 +373,23 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
         }
 
         numevents = aeApiPoll(eventLoop, tvp);
+
+        if (shortest && tvp->tv_sec == 0 && tvp->tv_usec < 1000) {
+            aeGetTime(&now_sec, &now_us);
+            struct timespec sleepDuration;
+            sleepDuration.tv_sec = shortest->when_sec - now_sec;
+            if (shortest->when_us < now_us) {
+                sleepDuration.tv_nsec =
+                    ((shortest->when_us+1000000) - now_us) * 1000;
+                sleepDuration.tv_sec--;
+            } else {
+                sleepDuration.tv_nsec = (shortest->when_us - now_us) * 1000;
+            }
+            if (sleepDuration.tv_sec > 0 || sleepDuration.tv_nsec > 0) {
+                nanosleep(&sleepDuration, NULL);
+            }
+        }
+
         for (j = 0; j < numevents; j++) {
             aeFileEvent *fe = &eventLoop->events[eventLoop->fired[j].fd];
             int mask = eventLoop->fired[j].mask;

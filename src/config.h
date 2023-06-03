@@ -37,7 +37,7 @@
 // NEW: If set to x then all randomizations will be + x for SME_RANDOMIZE_IRQ 
 // Staggering of clients using SME_STAGGER_WORKERS will be 
 // randomly picked from 0 - RANDOMIZATION_US
-#define REQUEST_RANDOMIZATION_US 10000
+#define REQUEST_RANDOMIZATION_US 100
 
 #define TIMEOUT_LOOP_FREQ   2
 
