@@ -16,6 +16,12 @@
 // Max recordable latency of 1 day
 #define MAX_LATENCY 24L * 60 * 60 * 1000000
 
+#ifdef RECORD_STATS
+static uint64_t **expected_times; // int64_t[threads][requests_per_thread]
+static uint64_t **actual_times; // int64_t[threads][requests_per_thread]
+static uint64_t **start_times;  // int64_t[threads][requests_per_thread]
+#endif
+
 generic_q_t *rx_ssl_q[MAX_STATQ_ARRAYS];
 
 static struct config {
@@ -96,6 +102,23 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
+#ifdef RECORD_STATS
+
+    // Malloc the arrays to 2 times the required size
+    // wrk2 does best effort to balance requests per thread, but there
+    // might be some +-, so 2 times should be more than sufficient a space
+    expected_times = (uint64_t **)malloc(cfg.threads * sizeof(int64_t *));
+    actual_times = (uint64_t **)malloc(cfg.threads * sizeof(uint64_t *));
+    start_times = (uint64_t **)malloc(cfg.threads * sizeof(int64_t *));
+    uint64_t malloc_size =
+        (2 * cfg.duration * cfg.rate / cfg.threads) * sizeof(int64_t);
+    for (int i = 0;i < cfg.threads; i++) {
+      expected_times[i] = (uint64_t *) malloc(malloc_size);
+      actual_times[i] = (uint64_t *) malloc(malloc_size);
+      start_times[i] = (uint64_t *) malloc(malloc_size);
+    }
+#endif
+
     char *schema  = copy_url_part(url, &parts, UF_SCHEMA);
     char *host    = copy_url_part(url, &parts, UF_HOST);
     char *port    = copy_url_part(url, &parts, UF_PORT);
@@ -122,9 +145,9 @@ int main(int argc, char **argv) {
         sock.write    = ssl_write;
         sock.readable = ssl_readable;
     }
-	
+
     cfg.host = host;
-	
+
     signal(SIGPIPE, SIG_IGN);
     signal(SIGINT,  SIG_IGN);
 
@@ -170,6 +193,10 @@ int main(int argc, char **argv) {
 #if SME_CLIENT
         t->id = i;
         t->start_at     = start;
+#endif
+#ifdef RECORD_STATS
+        t->thread_id    = (int)i;
+        t->num_sent_requests = 0;
 #endif
 
         t->L = script_create(cfg.script, url, headers);
@@ -356,6 +383,30 @@ int main(int argc, char **argv) {
 #endif
     printf("Requests/sec: %9.2Lf\n", req_per_s);
     printf("Transfer/sec: %10sB\n", format_binary(bytes_per_s));
+
+#ifdef RECORD_STATS
+    // Write the stats file
+    FILE *f = fopen("stats.csv", "w");
+    if (f == NULL) return -1;
+    for (int i = 0; i < cfg.threads; i++) {
+        fprintf(f, "start_time %d, expected_time %d, actual_time %d, ", i, i, i);
+    }
+    fprintf(f, "\n");
+    for (int i = 0; i < (2 * cfg.rate * cfg.duration) / cfg.threads; i++) {
+        bool all_empty = true;
+        for (int j = 0; j < cfg.threads; j++) {
+            if (threads[j].complete > i) {
+                all_empty = false;
+                fprintf(f, "%lu, ", start_times[j][i] - start_times[j][0]);
+                fprintf(f, "%lu, ", expected_times[j][i]);
+                fprintf(f, "%lu, ", actual_times[j][i]);
+            } else
+                fprintf(f, ", , , ");
+        }
+        fprintf(f, "\n");
+        if (all_empty) break;
+    }
+#endif
 
     if (script_has_done(L)) {
         script_summary(L, runtime_us, complete, bytes);
@@ -929,6 +980,13 @@ static int response_complete(http_parser *parser)
 #endif
 
         hdr_record_value(thread->u_latency_histogram, actual_latency_timing);
+
+#ifdef RECORD_STATS
+      expected_times[thread->thread_id][thread->complete] =
+          expected_latency_timing;
+      actual_times[thread->thread_id][thread->complete] =
+          actual_latency_timing;
+#endif
     }
 
 #if SME_CLIENT
@@ -1126,7 +1184,10 @@ static void socket_writeable(aeEventLoop *loop, int fd, void *data, int mask) {
 #if SME_CLIENT && SME_ASYNC_CLIENT
     insert(c->start, &(c->head_time), &(c->tail_time));
 #endif
-
+#ifdef RECORD_STATS
+  start_times[c->thread->thread_id][c->thread->num_sent_requests++] =
+      c->start;
+#endif
 #if SME_CLIENT
     c->all_requests_written_count++;
     c->request_written = 1;

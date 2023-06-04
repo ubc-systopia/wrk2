@@ -10,6 +10,7 @@
 #define HAVE_EVPORT
 #endif
 
+#define RECORD_STATS
 
 #define LVL_DBG 0
 #define LVL_INFO 1
